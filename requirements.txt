@@ -1,0 +1,28 @@
+# --- Core data / ML ---
+scikit-learn>=1.4
+pandas>=2.1
+numpy>=1.26
+pyarrow>=15.0
+scipy>=1.11
+
+# --- Dataset sourcing ---
+openml>=0.14
+
+# --- Multi-agent orchestration (added in Phase 2) ---
+langgraph>=0.2
+langchain-core>=0.3
+
+# --- LLM providers ---
+groq>=0.11
+python-dotenv>=1.0
+
+# --- Classical AutoML baseline (Day 4) ---
+flaml[automl]>=2.1
+
+# --- Serving / dashboard (Phase 5) ---
+fastapi>=0.110
+uvicorn>=0.29
+streamlit>=1.33
+
+# --- Tooling ---
+pytest>=8.0
