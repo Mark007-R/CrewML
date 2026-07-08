@@ -1,0 +1,87 @@
+{
+  "seed": 42,
+  "sklearn_version": "1.8.0",
+  "system": "solo_agent",
+  "mock": true,
+  "provider": "mock",
+  "note": "Baseline 1: a single agent, one shot, writes one sklearn solve(train_df) module; executed in a subprocess fitting on train only and scored once on the LOCKED holdout. This is the number the Phase-2 crew must beat. MOCK run \u2014 scores are NOT the real headline (EVAL_PROTOCOL.md \u00a75).",
+  "n_datasets_ok": 5,
+  "datasets": {
+    "credit-g": {
+      "metric": "roc_auc",
+      "task": "classification",
+      "mock": true,
+      "provider": "mock",
+      "model": null,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "ok": true,
+      "value": 0.7521428571428571,
+      "secondary": {
+        "accuracy": 0.74
+      },
+      "n_holdout": 200
+    },
+    "diabetes": {
+      "metric": "roc_auc",
+      "task": "classification",
+      "mock": true,
+      "provider": "mock",
+      "model": null,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "ok": true,
+      "value": 0.7987037037037037,
+      "secondary": {
+        "accuracy": 0.7337662337662337
+      },
+      "n_holdout": 154
+    },
+    "vehicle": {
+      "metric": "f1_macro",
+      "task": "classification",
+      "mock": true,
+      "provider": "mock",
+      "model": null,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "ok": true,
+      "value": 0.7762517088174983,
+      "secondary": {
+        "accuracy": 0.7764705882352941
+      },
+      "n_holdout": 170
+    },
+    "cpu_small": {
+      "metric": "r2",
+      "task": "regression",
+      "mock": true,
+      "provider": "mock",
+      "model": null,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "ok": true,
+      "value": 0.9747370475711117,
+      "secondary": {
+        "rmse": 2.7514188149650933
+      },
+      "n_holdout": 1639
+    },
+    "kin8nm": {
+      "metric": "r2",
+      "task": "regression",
+      "mock": true,
+      "provider": "mock",
+      "model": null,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "ok": true,
+      "value": 0.811956724738001,
+      "secondary": {
+        "rmse": 0.11406643296401799
+      },
+      "n_holdout": 1639
+    }
+  },
+  "failures": {}
+}

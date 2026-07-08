@@ -45,3 +45,32 @@ open the Phase 1 PR.
 
 **Next:** Day 3 — Baseline 1: solo LLM agent writes+runs one sklearn script → its
 held-out score (the crew's direct target).
+
+---
+
+## Day 3 — 2026-07-08 · Phase 1 (Foundation & Baselines)
+
+**Shipped:** Baseline 1 — the solo agent (one LLM, one shot, one sklearn script).
+
+- Built **`crewml/llm.py`** — a thin provider abstraction (`chat()` → `LLMResult`
+  with token accounting; Groq default, Anthropic optional). In **mock mode** it
+  raises `MockModeError` so callers must take a deterministic offline path — no
+  network needed to run. Plus `extract_python()` for fenced-code replies.
+- Built **`crewml/solo_agent.py`** + **`scripts/run_solo_agent.py`**: a train-only
+  profile summary + prompts asking for one `solve(train_df)` sklearn module;
+  executed in a **subprocess** by a *trusted* runner that fits on `train` and
+  predicts on held-out **features only** (never fits on holdout); scored once
+  through `crewml.scoring` → **`results/solo_agent_metrics.json`**. Holdout seal
+  re-verified after every dataset.
+- **MOCK run** (no LLM key): a fixed HistGradientBoosting single-shot script,
+  every score stamped `mock:true` (EVAL_PROTOCOL §5 — not the headline). Held-out:
+  credit-g 0.752, diabetes 0.799 AUC; vehicle 0.776 macro-F1; cpu_small 0.975,
+  kin8nm 0.812 R². Clears the Dummy floor everywhere; beats default_rf on
+  vehicle/cpu_small/kin8nm, trails slightly on the two small binary sets — the gap
+  the crew's Critic must close.
+- **59 tests pass** (36 prior + 23 new): LLM extraction + mock-mode refusal,
+  profile-is-train-only, the mock `solve` contract, and metrics completeness +
+  seal-intact integration checks.
+
+**Next:** Day 4 — Baseline 2: classical AutoML (FLAML) ceiling + full baselines
+table; Phase 1 Wrap-Up; merge the Phase 1 PR.
