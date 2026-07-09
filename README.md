@@ -52,13 +52,32 @@ python -m pytest tests/              # verify the seals hold
 The pipeline runs offline in **mock mode** when no LLM key is set — but mock numbers
 are never reported as real.
 
+## Baselines (the bar the crew must clear)
+
+Held-out scores per dataset, primary metric, higher is better. The full board and
+its provenance live in [`results/baselines_table.md`](results/baselines_table.md).
+
+| Dataset | Metric | Dummy (floor) | default RF | Solo agent | AutoML (FLAML) |
+|---|---|---|---|---|---|
+| credit-g | ROC AUC | 0.5000 | 0.7783 | 0.7521 *(mock)* | 0.7352 |
+| diabetes | ROC AUC | 0.5000 | 0.8118 | 0.7987 *(mock)* | 0.8039 |
+| vehicle | macro-F1 | 0.1028 | 0.7260 | 0.7763 *(mock)* | 0.7785 |
+| cpu_small | R² | −0.0029 | 0.9726 | 0.9747 *(mock)* | 0.9759 |
+| kin8nm | R² | −0.0002 | 0.6948 | 0.8120 *(mock)* | 0.8421 |
+
+*(mock)* — the solo agent ran without an LLM key, so its column is MOCK and not a
+headline number (EVAL_PROTOCOL §5). Notably the FLAML ceiling does **not** dominate
+everywhere under its budget — the untuned RandomForest still edges it on the two
+small binary sets — which is exactly the terrain where the Phase-2 crew has to earn
+its seat.
+
 ## Status
 
 Built in the open over 30 days. See [`PROGRESS_LOG.md`](PROGRESS_LOG.md) for the
 daily trail and `reports/` / `explainers/` for the per-day write-ups.
 
-- **Phase 1 — Foundation & Baselines** (Days 1–4) ← in progress
-- Phase 2 — MVP Crew (Days 5–11)
+- **Phase 1 — Foundation & Baselines** (Days 1–4) ✓ complete
+- Phase 2 — MVP Crew (Days 5–11) ← next
 - Phase 3 — Comparison Studies (Days 12–18)
 - Phase 4 — Hardening & Safety (Days 19–23)
 - Phase 5 — Production Wrapper (Days 24–27)

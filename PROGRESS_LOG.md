@@ -74,3 +74,33 @@ held-out score (the crew's direct target).
 
 **Next:** Day 4 — Baseline 2: classical AutoML (FLAML) ceiling + full baselines
 table; Phase 1 Wrap-Up; merge the Phase 1 PR.
+
+---
+
+## Day 4 — 2026-07-09 · Phase 1 (Foundation & Baselines) · **phase close**
+
+**Shipped:** Baseline 2 — the classical-AutoML ceiling (FLAML) + the full baselines
+board. Phase 1 complete.
+
+- Built **`crewml/automl_baseline.py`** + **`scripts/run_automl.py`**: FLAML fit
+  strictly on `train` (its own 5-fold CV, 120 s/dataset budget held ≥ the crew's
+  executor timeout for fairness), scored once on the LOCKED holdout via the shared
+  scorer → **`results/automl_metrics.json`**. Metric mapped to FLAML's objective
+  (roc_auc/macro_f1/r2); null-model guard; seal re-verified per dataset. **Real**
+  run (no LLM → no mock caveat).
+- Built **`crewml/leaderboard.py`** + **`scripts/build_baselines_table.py`**: reshape
+  the three metrics files into one board → **`results/baselines_table.{json,md}`**
+  (missing system → `—`, mock columns flagged; never re-scores).
+- **Held-out results:** FLAML tops 3/5 — kin8nm 0.842 (+0.147 over RF), vehicle
+  0.779, cpu_small 0.976. **Honest surprise:** on the two small binary sets AutoML
+  does *not* win — credit-g 0.735 (< RF's 0.778), diabetes 0.804 (≈ RF's 0.812).
+  Under a fixed budget, aggressive search on ~600–800 rows can generalise slightly
+  worse than a plain forest — pinpointing where the crew must earn its keep.
+- **77 tests pass** (59 prior + 18 new): metric mapping totality, leaderboard
+  assembler/renderer, and AutoML/board integration (complete, beats floor, board
+  agrees with sources). All 5 holdout seals intact across every scoring run.
+- Updated README (baselines board + Phase 1 ✓). **Phase 1 Wrap-Up** in the Day 4
+  report; merged the Phase 1 PR.
+
+**Next:** Phase 2, Day 5 — LangGraph state schema + graph skeleton (node stubs,
+wired edges, conditional Critic edge, `max_iterations` guard); open the Phase 2 PR.
