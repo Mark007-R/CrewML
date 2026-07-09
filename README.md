@@ -57,19 +57,31 @@ are never reported as real.
 Held-out scores per dataset, primary metric, higher is better. The full board and
 its provenance live in [`results/baselines_table.md`](results/baselines_table.md).
 
-| Dataset | Metric | Dummy (floor) | default RF | Solo agent | AutoML (FLAML) |
-|---|---|---|---|---|---|
-| credit-g | ROC AUC | 0.5000 | 0.7783 | 0.7521 *(mock)* | 0.7352 |
-| diabetes | ROC AUC | 0.5000 | 0.8118 | 0.7987 *(mock)* | 0.8039 |
-| vehicle | macro-F1 | 0.1028 | 0.7260 | 0.7763 *(mock)* | 0.7785 |
-| cpu_small | R² | −0.0029 | 0.9726 | 0.9747 *(mock)* | 0.9759 |
-| kin8nm | R² | −0.0002 | 0.6948 | 0.8120 *(mock)* | 0.8421 |
+Solo agent = **live** Groq Llama-3.3-70B, one shot, seeded.
 
-*(mock)* — the solo agent ran without an LLM key, so its column is MOCK and not a
-headline number (EVAL_PROTOCOL §5). Notably the FLAML ceiling does **not** dominate
-everywhere under its budget — the untuned RandomForest still edges it on the two
-small binary sets — which is exactly the terrain where the Phase-2 crew has to earn
-its seat.
+| Dataset | Metric | Dummy (floor) | default RF | Solo agent (live) | AutoML (FLAML) |
+|---|---|---|---|---|---|
+| credit-g | ROC AUC | 0.5000 | 0.7783 | 0.6517 | 0.7352 |
+| diabetes | ROC AUC | 0.5000 | 0.8118 | **0.8147** | 0.8039 |
+| vehicle | macro-F1 | 0.1028 | 0.7260 | ✗ crash | 0.7785 |
+| cpu_small | R² | −0.0029 | 0.9726 | 0.7129 | 0.9759 |
+| kin8nm | R² | −0.0002 | 0.6948 | ✗ crash | 0.8421 |
+
+**What the live solo run shows (and why it argues for a crew).** A single Llama-3.3
+shot with no critique or repair loop is *unreliable both ways*: it **crashed on 2/5**
+datasets (a hallucinated `f1_macro_score` import / bad hyper-parameter grid, and a
+`GridSearchCV` that timed out), and where it ran it swung from **best-on-the-board**
+on diabetes (0.815) to a weak 0.713 on cpu_small (vs the plain forest's 0.973). No
+second pair of eyes ever told it "that won't import" or "you left performance on the
+table." That gap — correctness *and* quality — is exactly what the Phase-2 crew's
+Critic (and the Day-20 self-repair loop) exist to close. Separately, the FLAML
+ceiling does not dominate everywhere either: the untuned RandomForest still edges it
+on the two small binary sets. Per-dataset, the bar the crew must clear is the
+**best non-crew cell in each row**.
+
+> The live solo number is Llama-3.3-70B specifically — not the ceiling of what *any*
+> solo agent could do. A stronger model (Day-16 provider study) or a repair loop
+> would lift it; both are deliberately out of scope for this one-shot baseline.
 
 ## Status
 

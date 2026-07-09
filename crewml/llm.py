@@ -52,6 +52,10 @@ def _chat_groq(system: str, user: str, *, temperature: float, max_tokens: int) -
         ],
         temperature=temperature,
         max_tokens=max_tokens,
+        # Seed the sampler for reproducibility (best-effort on Groq) so a given
+        # (prompt, temperature) re-runs to the same code — the project is
+        # seed-locked everywhere else (EVAL_PROTOCOL §3.1).
+        seed=config.SEED,
     )
     usage = resp.usage
     return LLMResult(

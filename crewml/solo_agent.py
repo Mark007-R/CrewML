@@ -114,7 +114,17 @@ SOLO_SYSTEM_PROMPT = textwrap.dedent(
     - Build ALL preprocessing (imputation, encoding, scaling) inside the returned
       estimator so it applies identically at prediction time. Fit only on
       `train_df`. Do NOT read any file, download anything, or access the network.
-    - Use only pandas, numpy and scikit-learn. Set random_state=42 everywhere.
+    - Use only pandas, numpy and scikit-learn. Set random_state=42 for
+      reproducibility ONLY on objects that accept it (models, CV splitters,
+      randomized/grid search estimators). Do NOT pass random_state to transformers
+      such as SimpleImputer, StandardScaler or OneHotEncoder, nor to GridSearchCV —
+      they do not accept it and it will raise a TypeError.
+    - The module must run first time: import only symbols that actually exist in
+      scikit-learn (e.g. there is NO `f1_macro_score` — use
+      `f1_score(..., average="macro")` or `make_scorer(f1_score, average="macro")`),
+      and pass a constructor only the keyword arguments that class truly accepts.
+      You get ONE attempt with no chance to fix a crash, so prefer APIs you are
+      certain of over clever ones you are unsure about.
     - Output ONLY the Python module in a single ```python code block. No prose.
 
     You never see the held-out test set; it is scored separately by predicting

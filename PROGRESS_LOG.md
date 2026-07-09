@@ -104,3 +104,28 @@ board. Phase 1 complete.
 
 **Next:** Phase 2, Day 5 — LangGraph state schema + graph skeleton (node stubs,
 wired edges, conditional Critic edge, `max_iterations` guard); open the Phase 2 PR.
+
+---
+
+## Update — 2026-07-09 · Solo agent now LIVE (Groq Llama-3.3-70B)
+
+**Shipped:** retired the MOCK solo column — Baseline 1 ran for real once a
+`GROQ_API_KEY` was configured. See [`reports/solo_live_update.md`](reports/solo_live_update.md).
+
+- **`crewml/llm.py`** — seeded the Groq call (`seed=SEED`) for reproducibility (the
+  one unseeded step in an otherwise seed-locked project).
+- **`crewml/solo_agent.py`** — corrected the prompt's "set `random_state` everywhere"
+  instruction (it forced `TypeError`s on transformers/`GridSearchCV`) and added a fair
+  general "use real APIs / valid kwargs" note. Not dataset-specific coaching.
+- **`tests/test_solo_agent.py`** — relaxed the mock-only "5/5 must succeed" assumption
+  to honesty invariants that hold for a real run (no silent drops; scored entries
+  finite + beat Dummy; seals intact; crashes reported as failures).
+- **Live held-out (llama-3.3-70b, one shot, seeded):** credit-g 0.6517, diabetes
+  **0.8147** (best on that row), cpu_small 0.7129; **vehicle & kin8nm CRASHED** (a
+  timed-out `GridSearchCV`; an invalid hyper-param grid). **3/5 scored.** A single
+  shot is unreliable on both correctness (2/5 crash) and quality (0.71 on cpu_small
+  vs the forest's 0.97) — the exact gap the crew's Critic + Day-20 self-repair close.
+- **74 tests pass, 3 skipped** (mock-mode contract + the 2 solo failures this run).
+
+**Note:** the solo number is Llama-3.3-70B-specific, not the ceiling of any solo
+agent; a stronger model (Day 16) or a repair loop (Day 20) would lift it.

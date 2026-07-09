@@ -19,8 +19,8 @@
           "mock": false
         },
         "solo_agent": {
-          "value": 0.7521428571428571,
-          "mock": true
+          "value": 0.6516666666666667,
+          "mock": false
         },
         "automl_flaml": {
           "value": 0.7352380952380952,
@@ -40,8 +40,8 @@
           "mock": false
         },
         "solo_agent": {
-          "value": 0.7987037037037037,
-          "mock": true
+          "value": 0.8147222222222222,
+          "mock": false
         },
         "automl_flaml": {
           "value": 0.8038888888888889,
@@ -61,8 +61,8 @@
           "mock": false
         },
         "solo_agent": {
-          "value": 0.7762517088174983,
-          "mock": true
+          "value": null,
+          "mock": false
         },
         "automl_flaml": {
           "value": 0.7784638425331623,
@@ -82,8 +82,8 @@
           "mock": false
         },
         "solo_agent": {
-          "value": 0.9747370475711117,
-          "mock": true
+          "value": 0.712922252454411,
+          "mock": false
         },
         "automl_flaml": {
           "value": 0.975864560435646,
@@ -103,8 +103,8 @@
           "mock": false
         },
         "solo_agent": {
-          "value": 0.811956724738001,
-          "mock": true
+          "value": null,
+          "mock": false
         },
         "automl_flaml": {
           "value": 0.8420610222933672,
@@ -113,5 +113,5 @@
       }
     }
   },
-  "any_mock": true
+  "any_mock": false
 }
