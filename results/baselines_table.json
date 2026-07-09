@@ -1,0 +1,117 @@
+{
+  "metric_by_dataset": {
+    "credit-g": "roc_auc",
+    "diabetes": "roc_auc",
+    "vehicle": "f1_macro",
+    "cpu_small": "r2",
+    "kin8nm": "r2"
+  },
+  "rows": {
+    "credit-g": {
+      "metric": "roc_auc",
+      "systems": {
+        "dummy": {
+          "value": 0.5,
+          "mock": false
+        },
+        "default_rf": {
+          "value": 0.7783333333333333,
+          "mock": false
+        },
+        "solo_agent": {
+          "value": 0.7521428571428571,
+          "mock": true
+        },
+        "automl_flaml": {
+          "value": 0.7352380952380952,
+          "mock": false
+        }
+      }
+    },
+    "diabetes": {
+      "metric": "roc_auc",
+      "systems": {
+        "dummy": {
+          "value": 0.5,
+          "mock": false
+        },
+        "default_rf": {
+          "value": 0.8117592592592593,
+          "mock": false
+        },
+        "solo_agent": {
+          "value": 0.7987037037037037,
+          "mock": true
+        },
+        "automl_flaml": {
+          "value": 0.8038888888888889,
+          "mock": false
+        }
+      }
+    },
+    "vehicle": {
+      "metric": "f1_macro",
+      "systems": {
+        "dummy": {
+          "value": 0.102803738317757,
+          "mock": false
+        },
+        "default_rf": {
+          "value": 0.7260095781834912,
+          "mock": false
+        },
+        "solo_agent": {
+          "value": 0.7762517088174983,
+          "mock": true
+        },
+        "automl_flaml": {
+          "value": 0.7784638425331623,
+          "mock": false
+        }
+      }
+    },
+    "cpu_small": {
+      "metric": "r2",
+      "systems": {
+        "dummy": {
+          "value": -0.0029324411709972242,
+          "mock": false
+        },
+        "default_rf": {
+          "value": 0.9726490552883412,
+          "mock": false
+        },
+        "solo_agent": {
+          "value": 0.9747370475711117,
+          "mock": true
+        },
+        "automl_flaml": {
+          "value": 0.975864560435646,
+          "mock": false
+        }
+      }
+    },
+    "kin8nm": {
+      "metric": "r2",
+      "systems": {
+        "dummy": {
+          "value": -0.00018730374626940716,
+          "mock": false
+        },
+        "default_rf": {
+          "value": 0.6947961467628312,
+          "mock": false
+        },
+        "solo_agent": {
+          "value": 0.811956724738001,
+          "mock": true
+        },
+        "automl_flaml": {
+          "value": 0.8420610222933672,
+          "mock": false
+        }
+      }
+    }
+  },
+  "any_mock": true
+}

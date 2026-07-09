@@ -17,7 +17,13 @@ groq>=0.11
 python-dotenv>=1.0
 
 # --- Classical AutoML baseline (Day 4) ---
+# FLAML + the gradient-boosting backends it selects across the suite. catboost is
+# NOT in flaml[automl] but FLAML picked it for kin8nm, so pin it explicitly for
+# reproducibility (else that learner is silently skipped on a fresh install).
 flaml[automl]>=2.1
+lightgbm>=4.0
+xgboost>=2.0
+catboost>=1.2
 
 # --- Serving / dashboard (Phase 5) ---
 fastapi>=0.110

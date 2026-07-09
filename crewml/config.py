@@ -42,6 +42,11 @@ MAX_ITERATIONS = int(os.getenv("CREWML_MAX_ITERATIONS", "3"))
 EXECUTOR_TIMEOUT_S = int(os.getenv("CREWML_EXECUTOR_TIMEOUT_S", "120"))
 RUN_TOKEN_BUDGET = int(os.getenv("CREWML_RUN_TOKEN_BUDGET", "200000"))
 
+# Per-dataset wall-clock budget for the Day 4 classical-AutoML ceiling (FLAML).
+# Held >= the crew's per-node executor timeout so beating AutoML is never an
+# artifact of handing the crew more compute (EVAL_PROTOCOL.md §4).
+AUTOML_TIME_BUDGET_S = int(os.getenv("CREWML_AUTOML_TIME_BUDGET_S", "120"))
+
 
 def is_mock_mode() -> bool:
     """True when no usable LLM key is configured — pipeline runs offline.

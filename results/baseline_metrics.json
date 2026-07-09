@@ -1,0 +1,113 @@
+{
+  "seed": 42,
+  "sklearn_version": "1.8.0",
+  "systems": [
+    "dummy",
+    "default_rf"
+  ],
+  "note": "Baseline 0: Dummy is the honest floor (ignores features); default_rf is an untuned RandomForest with minimal impute+one-hot preprocessing. All scores are on the LOCKED holdout. Higher is better for every metric.",
+  "n_datasets": 5,
+  "datasets": {
+    "credit-g": {
+      "metric": "roc_auc",
+      "task": "classification",
+      "dummy": {
+        "metric": "roc_auc",
+        "value": 0.5,
+        "secondary": {
+          "accuracy": 0.7
+        },
+        "n_holdout": 200
+      },
+      "default_rf": {
+        "metric": "roc_auc",
+        "value": 0.7783333333333333,
+        "secondary": {
+          "accuracy": 0.76
+        },
+        "n_holdout": 200
+      }
+    },
+    "diabetes": {
+      "metric": "roc_auc",
+      "task": "classification",
+      "dummy": {
+        "metric": "roc_auc",
+        "value": 0.5,
+        "secondary": {
+          "accuracy": 0.6493506493506493
+        },
+        "n_holdout": 154
+      },
+      "default_rf": {
+        "metric": "roc_auc",
+        "value": 0.8117592592592593,
+        "secondary": {
+          "accuracy": 0.7597402597402597
+        },
+        "n_holdout": 154
+      }
+    },
+    "vehicle": {
+      "metric": "f1_macro",
+      "task": "classification",
+      "dummy": {
+        "metric": "f1_macro",
+        "value": 0.102803738317757,
+        "secondary": {
+          "accuracy": 0.25882352941176473
+        },
+        "n_holdout": 170
+      },
+      "default_rf": {
+        "metric": "f1_macro",
+        "value": 0.7260095781834912,
+        "secondary": {
+          "accuracy": 0.7294117647058823
+        },
+        "n_holdout": 170
+      }
+    },
+    "cpu_small": {
+      "metric": "r2",
+      "task": "regression",
+      "dummy": {
+        "metric": "r2",
+        "value": -0.0029324411709972242,
+        "secondary": {
+          "rmse": 17.336063549370774
+        },
+        "n_holdout": 1639
+      },
+      "default_rf": {
+        "metric": "r2",
+        "value": 0.9726490552883412,
+        "secondary": {
+          "rmse": 2.862864652886049
+        },
+        "n_holdout": 1639
+      }
+    },
+    "kin8nm": {
+      "metric": "r2",
+      "task": "regression",
+      "dummy": {
+        "metric": "r2",
+        "value": -0.00018730374626940716,
+        "secondary": {
+          "rmse": 0.2630689709105032
+        },
+        "n_holdout": 1639
+      },
+      "default_rf": {
+        "metric": "r2",
+        "value": 0.6947961467628312,
+        "secondary": {
+          "rmse": 0.14531952291021827
+        },
+        "n_holdout": 1639
+      }
+    }
+  },
+  "failures": {}
+}
