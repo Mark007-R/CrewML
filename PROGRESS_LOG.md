@@ -129,3 +129,35 @@ wired edges, conditional Critic edge, `max_iterations` guard); open the Phase 2 
 
 **Note:** the solo number is Llama-3.3-70B-specific, not the ceiling of any solo
 agent; a stronger model (Day 16) or a repair loop (Day 20) would lift it.
+
+---
+
+## Day 5 — 2026-07-10 · Phase 2 (MVP Crew) · **phase open**
+
+**Shipped:** the LangGraph crew **skeleton** — shared state schema + wired graph with
+the Critic loop and its `max_iterations` guard. No LLM, no data, no scoring yet.
+
+- New subpackage **`crewml/crew/`**:
+  - **`state.py`** — `CrewState` (`TypedDict`): run inputs set once; produced fields
+    (`profile`/`plan`/`fe_code`/`training`/`decision`/`ensemble`/`report`) start `None`;
+    two append-only channels (`critiques`, `trace`) via an `operator.add` reducer so the
+    loop grows history. All values JSON/msgpack-friendly (checkpointing + Day-26 dashboard).
+    The holdout is never named — no-peeking is structural. `initial_state(spec, …)` seeds a run.
+  - **`nodes.py`** — seven node stubs (Profiler→Planner→FE→Trainer→Critic→Ensembler→Reporter),
+    each flagged `"stub": True`. The one real piece of logic is **`route_after_critic`**: guard
+    first (`iteration >= max_iterations` ⇒ finalize regardless), else honour the Critic's decision.
+  - **`graph.py`** — `build_graph()`/`build_crew()`; single conditional edge out of the Critic
+    (`iterate`→planner, `finalize`→ensembler); `CREW_NODES` exposes topology as data.
+- New **`scripts/run_crew.py`** — compiles + invokes the skeleton; trace + terminal summary →
+  `artifacts/crew/<key>/skeleton_run.json`. Verified: `profiler → (planner,fe,trainer,critic)×3
+  → ensembler → reporter`; the always-iterate stub Critic spends the full budget and the **guard**
+  stops the loop (a runaway crew is structurally impossible).
+- **88 tests pass, 3 skipped** (74 prior + 14 new): topology (7 nodes compile), router's three
+  cases (iterate only when asked *and* under budget; guard overrides "iterate" at the ceiling),
+  full-run termination at Reporter with 3 accumulated critiques, and honesty guards (Trainer stub
+  emits `cv_score=None`; no crew module references the holdout — asserted by source inspection).
+- Installed `langgraph 1.2.9` / `langchain-core 1.4.9` (already pinned in requirements). Opened
+  the Phase 2 PR.
+
+**Next:** Day 6 — the sandboxed Python executor tool (subprocess, timeout, captured
+stdout/artifacts/metrics, temp workdir) — the shared tool every real agent calls.

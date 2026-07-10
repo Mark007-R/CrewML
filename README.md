@@ -89,7 +89,7 @@ Built in the open over 30 days. See [`PROGRESS_LOG.md`](PROGRESS_LOG.md) for the
 daily trail and `reports/` / `explainers/` for the per-day write-ups.
 
 - **Phase 1 — Foundation & Baselines** (Days 1–4) ✓ complete
-- Phase 2 — MVP Crew (Days 5–11) ← next
+- **Phase 2 — MVP Crew** (Days 5–11) ← in progress · Day 5: LangGraph skeleton (state + wired graph + Critic loop/guard)
 - Phase 3 — Comparison Studies (Days 12–18)
 - Phase 4 — Hardening & Safety (Days 19–23)
 - Phase 5 — Production Wrapper (Days 24–27)
