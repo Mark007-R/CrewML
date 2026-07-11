@@ -161,3 +161,38 @@ the Critic loop and its `max_iterations` guard. No LLM, no data, no scoring yet.
 
 **Next:** Day 6 — the sandboxed Python executor tool (subprocess, timeout, captured
 stdout/artifacts/metrics, temp workdir) — the shared tool every real agent calls.
+
+---
+
+## Day 6 — 2026-07-11 · Phase 2 (MVP Crew)
+
+**Shipped:** the **sandboxed Python executor** — the crux tool every real agent runs
+code through. No agent shells out to Python again; they all go through here.
+
+- New **`crewml/executor.py`** — **`run_code(...) -> ExecResult`**: runs generated
+  code in a fresh **subprocess** (`sys.executable`, never `exec`'d into the crew),
+  with a hard **timeout** (default `EXECUTOR_TIMEOUT_S`=120 s → kill + `timed_out`,
+  never a hang), an **isolated workdir** (`artifacts/executor/<run_id>/`, git-ignored,
+  `cwd` set to it; a reused `run_id` starts clean), and **captured** stdout/stderr
+  (returned *and* logged). A **metrics + artifacts protocol** via an injected
+  `crew_io.py` helper (`emit_metrics`, `artifact_path`, `input_path`, `SEED`) hands
+  numbers + files back across the process boundary; malformed `metrics.json` is a
+  warning, not a failure. `ExecResult.as_dict()` is JSON-friendly for checkpointing.
+- New **`scripts/run_executor_demo.py`** — end-to-end on real (train-only) data: a
+  Trainer-style 5-fold CV fit (credit-g `cv_score≈0.7636`, a **train-only** number,
+  not held-out) + a saved `model.joblib`, plus a crash case and a timeout case — all
+  three contracts visible at once.
+- **105 tests pass, 3 skipped** (88 prior + 17 new): capture + clean exit; default
+  timeout == config; the metrics protocol + artifact collection (nested paths); every
+  failure mode **reported not raised** (crash, non-zero exit, real infinite-loop
+  timeout killed at 2 s, malformed/non-object metrics); isolation (distinct workdir
+  per run, inputs staged in, reused id cleaned, `keep_workdir=False` deletes); missing
+  input source is the one legit raise; `as_dict()` JSON-safe; and **structural
+  no-peeking** — the executor source never references a held-out loader (source-inspection).
+- **Scope honesty:** this is *process* isolation, not yet *security* isolation — import
+  allow-listing, a network jail, and adversarial resource limits are **Day 19**; the
+  module docstring says so explicitly so no report overclaims "sandboxed".
+
+**Next:** Day 7 — the **Profiler** agent: `train` split → structured `DataProfile`
+(schema, dtypes, missingness, target distribution, basic leakage checks). First real
+agent, and the executor's first real consumer.
