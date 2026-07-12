@@ -48,8 +48,9 @@ def main() -> int:
                     help="Critic-loop budget (default: config.MAX_ITERATIONS)")
     args = ap.parse_args()
 
-    print(f"[crew] SKELETON run — dataset={args.dataset} max_iterations={args.max_iterations}")
-    print("[crew] stub nodes only: no LLM, no data, no scoring (Day 5 wiring proof).", flush=True)
+    print(f"[crew] run — dataset={args.dataset} max_iterations={args.max_iterations}")
+    print("[crew] Profiler is REAL (Day 7, train-only EDA); Planner->Reporter still stubs.")
+    print("[crew] no held-out scoring yet — nothing here is a real modeling result.", flush=True)
 
     final = run_skeleton(args.dataset, args.max_iterations)
 

@@ -86,9 +86,15 @@ def test_guard_defaults_to_config_when_unset():
 
 @pytest.fixture(scope="module")
 def final_state():
+    # The Profiler is real (Day 7); keep the wiring test offline + free by
+    # disabling its advisory LLM narrative (deterministic facts still computed).
+    mp = pytest.MonkeyPatch()
+    mp.setenv("CREWML_PROFILER_LLM", "0")
     app = build_crew()
     st = initial_state(SPEC, max_iterations=3)
-    return app.invoke(st, config={"recursion_limit": 50})
+    final = app.invoke(st, config={"recursion_limit": 50})
+    mp.undo()
+    return final
 
 
 def test_run_terminates_at_reporter(final_state):
@@ -119,9 +125,19 @@ def test_all_produced_fields_populated(final_state):
 # --- Honesty: a stub can never masquerade as a real result ------------------
 
 def test_every_stub_payload_is_flagged(final_state):
-    for field in ("profile", "plan", "training", "ensemble", "report"):
+    # Profiler is real as of Day 7 — the remaining nodes are still stubs.
+    for field in ("plan", "training", "ensemble", "report"):
         assert final_state[field].get("stub") is True
     assert all(c.get("stub") is True for c in final_state["critiques"])
+
+
+def test_profiler_is_real_not_a_stub(final_state):
+    # The first stub retired: a genuine, train-derived DataProfile.
+    profile = final_state["profile"]
+    assert profile.get("stub") is False
+    assert profile["dataset_key"] == SPEC.key
+    assert profile["n_rows"] > 0 and profile["features"]
+    assert profile["assessment"]["source"] == "deterministic"
 
 
 def test_trainer_emits_no_numeric_score(final_state):
@@ -131,8 +147,10 @@ def test_trainer_emits_no_numeric_score(final_state):
 
 def test_crew_source_never_references_the_holdout():
     # Structural no-peeking: no crew-package module names the holdout loader.
-    for mod in (crew_nodes, __import__("crewml.crew.state", fromlist=["x"]),
-                __import__("crewml.crew.graph", fromlist=["x"])):
+    for mod in (crew_nodes,
+                __import__("crewml.crew.state", fromlist=["x"]),
+                __import__("crewml.crew.graph", fromlist=["x"]),
+                __import__("crewml.crew.profiler", fromlist=["x"])):
         src = inspect.getsource(mod)
         assert "load_holdout" not in src
         assert "holdout" not in src.lower()

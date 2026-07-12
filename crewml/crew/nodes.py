@@ -23,6 +23,7 @@ from __future__ import annotations
 from typing import Any
 
 from crewml.config import MAX_ITERATIONS
+from crewml.crew.profiler import run_profiler
 from crewml.crew.state import CrewState
 
 
@@ -34,13 +35,15 @@ def _stub(node: str, **fields: Any) -> dict[str, Any]:
 # --- Linear front half: Profiler -> Planner -> Feature Engineer -> Trainer ---
 
 def profiler(state: CrewState) -> dict[str, Any]:
-    """Profiler (stub). Day 7: schema, dtypes, missingness, target dist, leakage checks."""
-    profile = _stub(
-        "profiler",
-        note="DataProfile placeholder — real EDA lands Day 7 (train-only).",
-        dataset_key=state["dataset_key"],
-        task=state["task"],
-    )
+    """Profiler (REAL — Day 7). Train-only EDA -> structured DataProfile.
+
+    The first stub retired: computes schema, dtypes, missingness (incl. suspected
+    disguised-missing zeros), the target distribution + class imbalance, and basic
+    leakage checks — all deterministically, with an optional advisory LLM briefing
+    layered on top (see :mod:`crewml.crew.profiler`). Reads only the ``train``
+    split; the profile it returns is what the Planner (Day 8) reasons over.
+    """
+    profile = run_profiler(state["dataset_key"])
     return {"profile": profile, "trace": ["profiler"]}
 
 

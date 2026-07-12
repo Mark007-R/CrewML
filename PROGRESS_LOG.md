@@ -196,3 +196,49 @@ code through. No agent shells out to Python again; they all go through here.
 **Next:** Day 7 — the **Profiler** agent: `train` split → structured `DataProfile`
 (schema, dtypes, missingness, target distribution, basic leakage checks). First real
 agent, and the executor's first real consumer.
+
+---
+
+## Day 7 — 2026-07-12 · Phase 2 (MVP Crew)
+
+**Shipped:** the **Profiler** — the crew's first REAL node, retiring the first stub.
+Train-only EDA → a structured, JSON-friendly `DataProfile` the Planner reasons over.
+
+- New **`crewml/crew/profiler.py`**:
+  - **`build_profile(spec, train_df)`** — the deterministic core (no I/O, no LLM):
+    schema/dtypes + per-feature facts (missingness, cardinality, numeric stats +
+    **zero-fraction**); the target's class counts / imbalance / `positive_class`
+    (rarer class, matching `crewml.scoring`) or regression summary; and **basic
+    leakage checks** — constant, id-like (int/categorical near-unique only, so
+    continuous floats aren't false-flagged), duplicate columns/rows, suspected
+    disguised-missing (zero-inflated numerics), and near-perfect target predictors
+    (regression Pearson ≥ 0.98; classification per-group target purity ≥ 0.995 with
+    ≥ 0.30 lift). A rule-based **assessment** turns facts → flags + notes.
+  - **`run_profiler(key, *, with_llm=None)`** — loads `train`, builds the profile,
+    and layers an **optional advisory LLM narrative** for the Planner *on top of* the
+    facts (live provider only; `unavailable` in mock mode / on error — degrades, never
+    crashes). The narrative never supplies or overwrites a computed value.
+- **Node wired in** (`nodes.py::profiler` → `run_profiler`); graph topology + state
+  schema unchanged. New **`scripts/run_profiler.py`** → committed deterministic
+  profiles in **`results/day07_profiles.json`** (+ full profiles w/ narrative under
+  git-ignored `artifacts/`).
+- **Real run:** correctly flags credit-g imbalance (2.33:1) + mixed dtypes; catches
+  the diabetes **disguised-missing** signal (`insu`≈47% zeros, `skin`, `preg`); and
+  raises **zero** leakage flags on clean kin8nm (the checks don't cry wolf). Live
+  Groq narrative (real, `is_mock:false`, token-accounted) briefed the Planner on
+  imbalance + zero-inflation + the ROC-AUC objective.
+- **120 tests pass, 3 skipped** (105 prior + 15 net new), suite **fully offline**
+  (LLM path via monkeypatched fakes): profile shape/determinism/JSON-safety;
+  imbalance + rarer-positive; diabetes disguised-missing; **leakage planted-vs-clean**
+  (synthetic target-copy caught, noise ignored, kin8nm silent) + constant/id/dupe
+  detection; narrative advisory/honest across disabled/mock/live/failure; and
+  **structural no-peeking** now covering the new module.
+
+**Honesty note:** corrected Day 6's "Profiler = first executor consumer" — the
+executor sandboxes *generated* code; the Profiler's EDA is trusted first-party code
+with nothing to sandbox. The executor's first real consumer is the **Feature
+Engineer (Day 9)**. Flagged, not quietly dropped.
+
+**Next:** Day 8 — the **Planner** agent: read the `DataProfile` → a `ModelingPlan`
+(preprocessing, candidate model families, CV scheme); consumes the latest critique on
+a Critic-triggered re-entry.

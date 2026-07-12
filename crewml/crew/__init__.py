@@ -6,6 +6,7 @@ and its ``max_iterations`` guard. Real agents replace the stubs on Days 7-11.
 """
 from crewml.crew.graph import CREW_NODES, build_crew, build_graph
 from crewml.crew.nodes import route_after_critic
+from crewml.crew.profiler import build_profile, run_profiler
 from crewml.crew.state import CrewState, initial_state
 
 __all__ = [
@@ -15,4 +16,6 @@ __all__ = [
     "build_crew",
     "CREW_NODES",
     "route_after_critic",
+    "build_profile",
+    "run_profiler",
 ]
