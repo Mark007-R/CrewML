@@ -242,3 +242,43 @@ Engineer (Day 9)**. Flagged, not quietly dropped.
 **Next:** Day 8 — the **Planner** agent: read the `DataProfile` → a `ModelingPlan`
 (preprocessing, candidate model families, CV scheme); consumes the latest critique on
 a Critic-triggered re-entry.
+
+## Day 8 — 2026-07-13 · Phase 2 (MVP Crew)
+
+**Built:** the **Planner** agent — the crew's second real node — retiring the second
+stub. `crewml/crew/planner.py`: `build_plan(profile, *, critique, iteration)` reasons
+purely over the Profiler's `DataProfile` (never the data) to produce a `ModelingPlan`:
+column drops (from the profile's leakage checks, each with a reason), dtype-aware
+preprocessing (median/most-frequent imputation, standard scaling for scale-sensitive
+models, `zero_as_missing` for suspected disguised-missing, one-hot vs. ordinal by
+cardinality), task-appropriate candidate models with seed grids, the CV scheme
+(`StratifiedKFold`/`KFold`, folds clamped to the rarest class, seeded, correct scorer),
+and an imbalance strategy that fires only when flagged. `run_planner(...)` layers an
+optional advisory LLM refinement note on top. Node wired in; graph topology unchanged.
+
+- **Real run** (`scripts/run_planner.py`, all 5 datasets): credit-g → ColumnTransformer
+  plan + stratified AUC CV + imbalance **on** (pos=`bad`); diabetes → `zero_as_missing =
+  [preg, skin, insu]` flows from the profile's disguised-missing signal; vehicle → macro-F1,
+  imbalance **off** (near-balanced); cpu_small/kin8nm → KFold/r2 tree-first + Ridge.
+  Deterministic plans committed to `results/day08_plans.json`.
+- **Honest degradation:** a live Groq narrative was requested but the provider returned
+  `400 organization_restricted` on every call. The design's failure path held — each plan
+  recorded `llm_narrative.source: "unavailable"` with the provider error as reason,
+  `is_mock:false`, and the **deterministic plan (source of truth) fully intact**. No
+  narrative invented; nothing mock reported as real (EVAL_PROTOCOL §5).
+- **141 tests pass, 3 skipped** (120 prior + 21 net new), suite **fully offline** (LLM
+  path via monkeypatched fakes): plan shape/determinism/JSON-safety; drops-follow-profile
+  (planted constant/id/dupe dropped with reasons, clean kin8nm drops nothing); dtype-aware
+  preprocessing + diabetes zero-as-missing; stratified-vs-KFold + correct scorer + folds ≤
+  rarest class; imbalance on-skew/off-balanced; **the Critic loop responds** (an *overfit*
+  critique genuinely strengthens regularisation, unmatched critique noted not dropped); and
+  **structural no-peeking** — planner.py names neither `holdout` nor `load_train` (it reads
+  a dict).
+
+**Honesty note:** the Planner's *response* to Critic feedback is wired now, ahead of the
+Day-10 Critic, so the loop is functional on arrival — a no-op until a critique exists.
+
+**Next:** Day 9 — **Feature Engineer + Trainer**: generate FE code from the plan, run it
+through the Day-6 sandboxed executor (its first real *generated*-code consumer), train the
+candidates under the planned CV, and return cross-validated metrics + artifacts. The crew's
+first real numbers land here.

@@ -23,6 +23,7 @@ from __future__ import annotations
 from typing import Any
 
 from crewml.config import MAX_ITERATIONS
+from crewml.crew.planner import run_planner
 from crewml.crew.profiler import run_profiler
 from crewml.crew.state import CrewState
 
@@ -48,16 +49,21 @@ def profiler(state: CrewState) -> dict[str, Any]:
 
 
 def planner(state: CrewState) -> dict[str, Any]:
-    """Planner (stub). Day 8: read profile -> preprocessing + candidate models + CV scheme.
+    """Planner (REAL — Day 8). Read the DataProfile -> structured ModelingPlan.
 
-    On a Critic-triggered re-entry it will consume the latest critique; today it
-    just records which iteration it is planning for.
+    The second stub retired: reasons purely over the profile the Profiler produced
+    (never the data) to decide column drops, dtype-aware preprocessing, candidate
+    model families with seed grids, the CV scheme, and the imbalance strategy — all
+    deterministically, with an optional advisory LLM briefing layered on top (see
+    :mod:`crewml.crew.planner`). On a Critic-triggered re-entry it consumes the latest
+    critique and adjusts the plan; on the first pass ``critiques`` is empty and the
+    plan is built from the profile alone. Feeds the Feature Engineer + Trainer (Day 9).
     """
-    plan = _stub(
-        "planner",
-        note="ModelingPlan placeholder — real planning lands Day 8.",
-        planning_for_iteration=state.get("iteration", 0),
-        addressed_critique=(state.get("critiques") or [{}])[-1] if state.get("critiques") else None,
+    critiques = state.get("critiques") or []
+    plan = run_planner(
+        state["profile"],
+        critique=critiques[-1] if critiques else None,
+        iteration=state.get("iteration", 0),
     )
     return {"plan": plan, "trace": ["planner"]}
 

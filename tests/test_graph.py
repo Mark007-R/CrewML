@@ -86,10 +86,12 @@ def test_guard_defaults_to_config_when_unset():
 
 @pytest.fixture(scope="module")
 def final_state():
-    # The Profiler is real (Day 7); keep the wiring test offline + free by
-    # disabling its advisory LLM narrative (deterministic facts still computed).
+    # The Profiler (Day 7) and Planner (Day 8) are real; keep the wiring test
+    # offline + free by disabling their advisory LLM narratives (the deterministic
+    # facts and plan are still computed in full).
     mp = pytest.MonkeyPatch()
     mp.setenv("CREWML_PROFILER_LLM", "0")
+    mp.setenv("CREWML_PLANNER_LLM", "0")
     app = build_crew()
     st = initial_state(SPEC, max_iterations=3)
     final = app.invoke(st, config={"recursion_limit": 50})
@@ -125,8 +127,8 @@ def test_all_produced_fields_populated(final_state):
 # --- Honesty: a stub can never masquerade as a real result ------------------
 
 def test_every_stub_payload_is_flagged(final_state):
-    # Profiler is real as of Day 7 — the remaining nodes are still stubs.
-    for field in ("plan", "training", "ensemble", "report"):
+    # Profiler (Day 7) and Planner (Day 8) are real — the rest are still stubs.
+    for field in ("training", "ensemble", "report"):
         assert final_state[field].get("stub") is True
     assert all(c.get("stub") is True for c in final_state["critiques"])
 
@@ -140,6 +142,15 @@ def test_profiler_is_real_not_a_stub(final_state):
     assert profile["assessment"]["source"] == "deterministic"
 
 
+def test_planner_is_real_not_a_stub(final_state):
+    # The second stub retired: a genuine, profile-derived ModelingPlan.
+    plan = final_state["plan"]
+    assert plan.get("stub") is False
+    assert plan["dataset_key"] == SPEC.key
+    assert plan["candidate_models"] and plan["cv"]["scheme"] == "StratifiedKFold"
+    assert plan["recommended_primary_model"] == plan["candidate_models"][0]["name"]
+
+
 def test_trainer_emits_no_numeric_score(final_state):
     # A stub must never surface a number that could read as a held-out result.
     assert final_state["training"]["cv_score"] is None
@@ -150,7 +161,8 @@ def test_crew_source_never_references_the_holdout():
     for mod in (crew_nodes,
                 __import__("crewml.crew.state", fromlist=["x"]),
                 __import__("crewml.crew.graph", fromlist=["x"]),
-                __import__("crewml.crew.profiler", fromlist=["x"])):
+                __import__("crewml.crew.profiler", fromlist=["x"]),
+                __import__("crewml.crew.planner", fromlist=["x"])):
         src = inspect.getsource(mod)
         assert "load_holdout" not in src
         assert "holdout" not in src.lower()

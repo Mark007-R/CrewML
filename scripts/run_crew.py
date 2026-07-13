@@ -49,7 +49,7 @@ def main() -> int:
     args = ap.parse_args()
 
     print(f"[crew] run — dataset={args.dataset} max_iterations={args.max_iterations}")
-    print("[crew] Profiler is REAL (Day 7, train-only EDA); Planner->Reporter still stubs.")
+    print("[crew] Profiler (Day 7) + Planner (Day 8) are REAL; Feature Engineer->Reporter still stubs.")
     print("[crew] no held-out scoring yet — nothing here is a real modeling result.", flush=True)
 
     final = run_skeleton(args.dataset, args.max_iterations)

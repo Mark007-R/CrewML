@@ -1,0 +1,679 @@
+{
+  "datasets": {
+    "credit-g": {
+      "schema_version": 1,
+      "stub": false,
+      "node": "planner",
+      "dataset_key": "credit-g",
+      "task": "classification",
+      "subtype": "binary",
+      "metric": "roc_auc",
+      "planning_for_iteration": 0,
+      "drop_columns": [],
+      "drop_reasons": [],
+      "preprocessing": {
+        "numeric": {
+          "columns": [
+            "age",
+            "credit_amount",
+            "duration",
+            "existing_credits",
+            "installment_commitment",
+            "num_dependents",
+            "residence_since"
+          ],
+          "impute": "median",
+          "scale": "standard",
+          "zero_as_missing": [],
+          "zero_as_missing_is_heuristic": false
+        },
+        "categorical": {
+          "columns": [
+            "checking_status",
+            "credit_history",
+            "employment",
+            "foreign_worker",
+            "housing",
+            "job",
+            "other_parties",
+            "other_payment_plans",
+            "own_telephone",
+            "personal_status",
+            "property_magnitude",
+            "purpose",
+            "savings_status"
+          ],
+          "impute": "most_frequent",
+          "onehot_columns": [
+            "checking_status",
+            "credit_history",
+            "employment",
+            "foreign_worker",
+            "housing",
+            "job",
+            "other_parties",
+            "other_payment_plans",
+            "own_telephone",
+            "personal_status",
+            "property_magnitude",
+            "purpose",
+            "savings_status"
+          ],
+          "onehot_params": {
+            "handle_unknown": "ignore"
+          },
+          "ordinal_columns": []
+        },
+        "drop_columns": []
+      },
+      "candidate_models": [
+        {
+          "name": "hist_gradient_boosting",
+          "estimator": "HistGradientBoostingClassifier",
+          "family": "tree",
+          "needs_scaling": false,
+          "supports_proba": true,
+          "supports_class_weight": false,
+          "param_grid": {
+            "model__learning_rate": [
+              0.05,
+              0.1
+            ],
+            "model__max_iter": [
+              200,
+              400
+            ],
+            "model__max_leaf_nodes": [
+              31,
+              63
+            ]
+          },
+          "rationale": "Strong default on tabular data; handles mixed scales and interactions without tuning."
+        },
+        {
+          "name": "random_forest",
+          "estimator": "RandomForestClassifier",
+          "family": "tree",
+          "needs_scaling": false,
+          "supports_proba": true,
+          "supports_class_weight": true,
+          "param_grid": {
+            "model__n_estimators": [
+              300,
+              600
+            ],
+            "model__max_depth": [
+              null,
+              20
+            ],
+            "model__min_samples_leaf": [
+              1,
+              4
+            ]
+          },
+          "rationale": "Low-variance bagged trees; supports class_weight='balanced' for skew."
+        },
+        {
+          "name": "logistic_regression",
+          "estimator": "LogisticRegression",
+          "family": "linear",
+          "needs_scaling": true,
+          "supports_proba": true,
+          "supports_class_weight": true,
+          "param_grid": {
+            "model__C": [
+              0.1,
+              1.0,
+              10.0
+            ]
+          },
+          "rationale": "Calibrated linear baseline; fast, interpretable, class_weight-capable."
+        }
+      ],
+      "cv": {
+        "scheme": "StratifiedKFold",
+        "n_splits": 5,
+        "shuffle": true,
+        "random_state": 42,
+        "scoring": "roc_auc"
+      },
+      "imbalance_strategy": {
+        "recommended": true,
+        "method": "class_weight='balanced'",
+        "apply_to": "models that support class_weight (RandomForest, LogisticRegression)",
+        "use_stratified_cv": true,
+        "positive_class": "bad",
+        "imbalance_ratio": 2.333333,
+        "note": "Rarer class 'bad' is the positive class; the primary metric 'roc_auc' is threshold-independent, so optimise ranking rather than a 0.5 cutoff."
+      },
+      "recommended_primary_model": "hist_gradient_boosting",
+      "rationale": [
+        "Task classification (binary); optimise roc_auc via StratifiedKFold(5).",
+        "7 numeric + 13 categorical feature(s) after dropping 0.",
+        "Class imbalance present \u2014 class_weight='balanced' + stratified CV recommended.",
+        "Candidate models: hist_gradient_boosting, random_forest, logistic_regression (start with hist_gradient_boosting)."
+      ],
+      "addressed_critique": null
+    },
+    "diabetes": {
+      "schema_version": 1,
+      "stub": false,
+      "node": "planner",
+      "dataset_key": "diabetes",
+      "task": "classification",
+      "subtype": "binary",
+      "metric": "roc_auc",
+      "planning_for_iteration": 0,
+      "drop_columns": [],
+      "drop_reasons": [],
+      "preprocessing": {
+        "numeric": {
+          "columns": [
+            "age",
+            "insu",
+            "mass",
+            "pedi",
+            "plas",
+            "preg",
+            "pres",
+            "skin"
+          ],
+          "impute": "median",
+          "scale": "standard",
+          "zero_as_missing": [
+            "preg",
+            "skin",
+            "insu"
+          ],
+          "zero_as_missing_is_heuristic": true
+        },
+        "categorical": {
+          "columns": [],
+          "impute": "most_frequent",
+          "onehot_columns": [],
+          "onehot_params": {
+            "handle_unknown": "ignore"
+          },
+          "ordinal_columns": []
+        },
+        "drop_columns": []
+      },
+      "candidate_models": [
+        {
+          "name": "hist_gradient_boosting",
+          "estimator": "HistGradientBoostingClassifier",
+          "family": "tree",
+          "needs_scaling": false,
+          "supports_proba": true,
+          "supports_class_weight": false,
+          "param_grid": {
+            "model__learning_rate": [
+              0.05,
+              0.1
+            ],
+            "model__max_iter": [
+              200,
+              400
+            ],
+            "model__max_leaf_nodes": [
+              31,
+              63
+            ]
+          },
+          "rationale": "Strong default on tabular data; handles mixed scales and interactions without tuning."
+        },
+        {
+          "name": "random_forest",
+          "estimator": "RandomForestClassifier",
+          "family": "tree",
+          "needs_scaling": false,
+          "supports_proba": true,
+          "supports_class_weight": true,
+          "param_grid": {
+            "model__n_estimators": [
+              300,
+              600
+            ],
+            "model__max_depth": [
+              null,
+              20
+            ],
+            "model__min_samples_leaf": [
+              1,
+              4
+            ]
+          },
+          "rationale": "Low-variance bagged trees; supports class_weight='balanced' for skew."
+        },
+        {
+          "name": "logistic_regression",
+          "estimator": "LogisticRegression",
+          "family": "linear",
+          "needs_scaling": true,
+          "supports_proba": true,
+          "supports_class_weight": true,
+          "param_grid": {
+            "model__C": [
+              0.1,
+              1.0,
+              10.0
+            ]
+          },
+          "rationale": "Calibrated linear baseline; fast, interpretable, class_weight-capable."
+        }
+      ],
+      "cv": {
+        "scheme": "StratifiedKFold",
+        "n_splits": 5,
+        "shuffle": true,
+        "random_state": 42,
+        "scoring": "roc_auc"
+      },
+      "imbalance_strategy": {
+        "recommended": true,
+        "method": "class_weight='balanced'",
+        "apply_to": "models that support class_weight (RandomForest, LogisticRegression)",
+        "use_stratified_cv": true,
+        "positive_class": "tested_positive",
+        "imbalance_ratio": 1.869159,
+        "note": "Rarer class 'tested_positive' is the positive class; the primary metric 'roc_auc' is threshold-independent, so optimise ranking rather than a 0.5 cutoff."
+      },
+      "recommended_primary_model": "hist_gradient_boosting",
+      "rationale": [
+        "Task classification (binary); optimise roc_auc via StratifiedKFold(5).",
+        "8 numeric + 0 categorical feature(s) after dropping 0.",
+        "Treating zeros as missing (heuristic) in ['preg', 'skin', 'insu'] before median imputation.",
+        "Class imbalance present \u2014 class_weight='balanced' + stratified CV recommended.",
+        "Candidate models: hist_gradient_boosting, random_forest, logistic_regression (start with hist_gradient_boosting)."
+      ],
+      "addressed_critique": null
+    },
+    "vehicle": {
+      "schema_version": 1,
+      "stub": false,
+      "node": "planner",
+      "dataset_key": "vehicle",
+      "task": "classification",
+      "subtype": "multiclass",
+      "metric": "f1_macro",
+      "planning_for_iteration": 0,
+      "drop_columns": [],
+      "drop_reasons": [],
+      "preprocessing": {
+        "numeric": {
+          "columns": [
+            "CIRCULARITY",
+            "COMPACTNESS",
+            "DISTANCE_CIRCULARITY",
+            "ELONGATEDNESS",
+            "HOLLOWS_RATIO",
+            "KURTOSIS_ABOUT_MAJOR",
+            "KURTOSIS_ABOUT_MINOR",
+            "MAX.LENGTH_ASPECT_RATIO",
+            "MAX.LENGTH_RECTANGULARITY",
+            "PR.AXIS_ASPECT_RATIO",
+            "PR.AXIS_RECTANGULARITY",
+            "RADIUS_RATIO",
+            "SCALED_RADIUS_OF_GYRATION",
+            "SCALED_VARIANCE_MAJOR",
+            "SCALED_VARIANCE_MINOR",
+            "SCATTER_RATIO",
+            "SKEWNESS_ABOUT_MAJOR",
+            "SKEWNESS_ABOUT_MINOR"
+          ],
+          "impute": "median",
+          "scale": "standard",
+          "zero_as_missing": [
+            "SKEWNESS_ABOUT_MINOR"
+          ],
+          "zero_as_missing_is_heuristic": true
+        },
+        "categorical": {
+          "columns": [],
+          "impute": "most_frequent",
+          "onehot_columns": [],
+          "onehot_params": {
+            "handle_unknown": "ignore"
+          },
+          "ordinal_columns": []
+        },
+        "drop_columns": []
+      },
+      "candidate_models": [
+        {
+          "name": "hist_gradient_boosting",
+          "estimator": "HistGradientBoostingClassifier",
+          "family": "tree",
+          "needs_scaling": false,
+          "supports_proba": true,
+          "supports_class_weight": false,
+          "param_grid": {
+            "model__learning_rate": [
+              0.05,
+              0.1
+            ],
+            "model__max_iter": [
+              200,
+              400
+            ],
+            "model__max_leaf_nodes": [
+              31,
+              63
+            ]
+          },
+          "rationale": "Strong default on tabular data; handles mixed scales and interactions without tuning."
+        },
+        {
+          "name": "random_forest",
+          "estimator": "RandomForestClassifier",
+          "family": "tree",
+          "needs_scaling": false,
+          "supports_proba": true,
+          "supports_class_weight": true,
+          "param_grid": {
+            "model__n_estimators": [
+              300,
+              600
+            ],
+            "model__max_depth": [
+              null,
+              20
+            ],
+            "model__min_samples_leaf": [
+              1,
+              4
+            ]
+          },
+          "rationale": "Low-variance bagged trees; supports class_weight='balanced' for skew."
+        },
+        {
+          "name": "logistic_regression",
+          "estimator": "LogisticRegression",
+          "family": "linear",
+          "needs_scaling": true,
+          "supports_proba": true,
+          "supports_class_weight": true,
+          "param_grid": {
+            "model__C": [
+              0.1,
+              1.0,
+              10.0
+            ]
+          },
+          "rationale": "Calibrated linear baseline; fast, interpretable, class_weight-capable."
+        }
+      ],
+      "cv": {
+        "scheme": "StratifiedKFold",
+        "n_splits": 5,
+        "shuffle": true,
+        "random_state": 42,
+        "scoring": "f1_macro"
+      },
+      "imbalance_strategy": {
+        "recommended": false,
+        "reason": "classes are roughly balanced"
+      },
+      "recommended_primary_model": "hist_gradient_boosting",
+      "rationale": [
+        "Task classification (multiclass); optimise f1_macro via StratifiedKFold(5).",
+        "18 numeric + 0 categorical feature(s) after dropping 0.",
+        "Treating zeros as missing (heuristic) in ['SKEWNESS_ABOUT_MINOR'] before median imputation.",
+        "Candidate models: hist_gradient_boosting, random_forest, logistic_regression (start with hist_gradient_boosting)."
+      ],
+      "addressed_critique": null
+    },
+    "cpu_small": {
+      "schema_version": 1,
+      "stub": false,
+      "node": "planner",
+      "dataset_key": "cpu_small",
+      "task": "regression",
+      "subtype": "regression",
+      "metric": "r2",
+      "planning_for_iteration": 0,
+      "drop_columns": [],
+      "drop_reasons": [],
+      "preprocessing": {
+        "numeric": {
+          "columns": [
+            "exec",
+            "fork",
+            "freemem",
+            "freeswap",
+            "lread",
+            "lwrite",
+            "rchar",
+            "runqsz",
+            "scall",
+            "sread",
+            "swrite",
+            "wchar"
+          ],
+          "impute": "median",
+          "scale": "standard",
+          "zero_as_missing": [
+            "lwrite",
+            "lread"
+          ],
+          "zero_as_missing_is_heuristic": true
+        },
+        "categorical": {
+          "columns": [],
+          "impute": "most_frequent",
+          "onehot_columns": [],
+          "onehot_params": {
+            "handle_unknown": "ignore"
+          },
+          "ordinal_columns": []
+        },
+        "drop_columns": []
+      },
+      "candidate_models": [
+        {
+          "name": "hist_gradient_boosting",
+          "estimator": "HistGradientBoostingRegressor",
+          "family": "tree",
+          "needs_scaling": false,
+          "supports_proba": false,
+          "supports_class_weight": false,
+          "param_grid": {
+            "model__learning_rate": [
+              0.05,
+              0.1
+            ],
+            "model__max_iter": [
+              200,
+              400
+            ],
+            "model__max_leaf_nodes": [
+              31,
+              63
+            ]
+          },
+          "rationale": "Strong default for non-linear tabular regression; robust to feature scale."
+        },
+        {
+          "name": "random_forest",
+          "estimator": "RandomForestRegressor",
+          "family": "tree",
+          "needs_scaling": false,
+          "supports_proba": false,
+          "supports_class_weight": false,
+          "param_grid": {
+            "model__n_estimators": [
+              300,
+              600
+            ],
+            "model__max_depth": [
+              null,
+              20
+            ],
+            "model__min_samples_leaf": [
+              1,
+              4
+            ]
+          },
+          "rationale": "Low-variance ensemble; captures interactions the linear model misses."
+        },
+        {
+          "name": "ridge",
+          "estimator": "Ridge",
+          "family": "linear",
+          "needs_scaling": true,
+          "supports_proba": false,
+          "supports_class_weight": false,
+          "param_grid": {
+            "model__alpha": [
+              0.1,
+              1.0,
+              10.0
+            ]
+          },
+          "rationale": "Regularised linear baseline; cheap reference that exposes non-linearity gains."
+        }
+      ],
+      "cv": {
+        "scheme": "KFold",
+        "n_splits": 5,
+        "shuffle": true,
+        "random_state": 42,
+        "scoring": "r2"
+      },
+      "imbalance_strategy": {
+        "recommended": false,
+        "reason": "regression \u2014 no class balance to manage"
+      },
+      "recommended_primary_model": "hist_gradient_boosting",
+      "rationale": [
+        "Task regression (regression); optimise r2 via KFold(5).",
+        "12 numeric + 0 categorical feature(s) after dropping 0.",
+        "Treating zeros as missing (heuristic) in ['lwrite', 'lread'] before median imputation.",
+        "Candidate models: hist_gradient_boosting, random_forest, ridge (start with hist_gradient_boosting)."
+      ],
+      "addressed_critique": null
+    },
+    "kin8nm": {
+      "schema_version": 1,
+      "stub": false,
+      "node": "planner",
+      "dataset_key": "kin8nm",
+      "task": "regression",
+      "subtype": "regression",
+      "metric": "r2",
+      "planning_for_iteration": 0,
+      "drop_columns": [],
+      "drop_reasons": [],
+      "preprocessing": {
+        "numeric": {
+          "columns": [
+            "theta1",
+            "theta2",
+            "theta3",
+            "theta4",
+            "theta5",
+            "theta6",
+            "theta7",
+            "theta8"
+          ],
+          "impute": "median",
+          "scale": "standard",
+          "zero_as_missing": [],
+          "zero_as_missing_is_heuristic": false
+        },
+        "categorical": {
+          "columns": [],
+          "impute": "most_frequent",
+          "onehot_columns": [],
+          "onehot_params": {
+            "handle_unknown": "ignore"
+          },
+          "ordinal_columns": []
+        },
+        "drop_columns": []
+      },
+      "candidate_models": [
+        {
+          "name": "hist_gradient_boosting",
+          "estimator": "HistGradientBoostingRegressor",
+          "family": "tree",
+          "needs_scaling": false,
+          "supports_proba": false,
+          "supports_class_weight": false,
+          "param_grid": {
+            "model__learning_rate": [
+              0.05,
+              0.1
+            ],
+            "model__max_iter": [
+              200,
+              400
+            ],
+            "model__max_leaf_nodes": [
+              31,
+              63
+            ]
+          },
+          "rationale": "Strong default for non-linear tabular regression; robust to feature scale."
+        },
+        {
+          "name": "random_forest",
+          "estimator": "RandomForestRegressor",
+          "family": "tree",
+          "needs_scaling": false,
+          "supports_proba": false,
+          "supports_class_weight": false,
+          "param_grid": {
+            "model__n_estimators": [
+              300,
+              600
+            ],
+            "model__max_depth": [
+              null,
+              20
+            ],
+            "model__min_samples_leaf": [
+              1,
+              4
+            ]
+          },
+          "rationale": "Low-variance ensemble; captures interactions the linear model misses."
+        },
+        {
+          "name": "ridge",
+          "estimator": "Ridge",
+          "family": "linear",
+          "needs_scaling": true,
+          "supports_proba": false,
+          "supports_class_weight": false,
+          "param_grid": {
+            "model__alpha": [
+              0.1,
+              1.0,
+              10.0
+            ]
+          },
+          "rationale": "Regularised linear baseline; cheap reference that exposes non-linearity gains."
+        }
+      ],
+      "cv": {
+        "scheme": "KFold",
+        "n_splits": 5,
+        "shuffle": true,
+        "random_state": 42,
+        "scoring": "r2"
+      },
+      "imbalance_strategy": {
+        "recommended": false,
+        "reason": "regression \u2014 no class balance to manage"
+      },
+      "recommended_primary_model": "hist_gradient_boosting",
+      "rationale": [
+        "Task regression (regression); optimise r2 via KFold(5).",
+        "8 numeric + 0 categorical feature(s) after dropping 0.",
+        "Candidate models: hist_gradient_boosting, random_forest, ridge (start with hist_gradient_boosting)."
+      ],
+      "addressed_critique": null
+    }
+  }
+}
