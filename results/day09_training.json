@@ -1,0 +1,65 @@
+{
+  "datasets": {
+    "credit-g": {
+      "dataset_key": "credit-g",
+      "task": "classification",
+      "subtype": "binary",
+      "metric": "roc_auc",
+      "ok": true,
+      "param_search": true,
+      "fe_source": "fallback",
+      "fe_new_columns": [
+        "row_nan_count"
+      ],
+      "best_model": "random_forest",
+      "best_cv_score": 0.799405,
+      "best_cv_std": 0.062274,
+      "best_params": {
+        "model__max_depth": 20,
+        "model__min_samples_leaf": 1,
+        "model__n_estimators": 600
+      },
+      "per_model": [
+        {
+          "name": "hist_gradient_boosting",
+          "cv_mean": 0.770275,
+          "cv_std": 0.052877,
+          "best_params": {
+            "model__learning_rate": 0.05,
+            "model__max_iter": 200,
+            "model__max_leaf_nodes": 31
+          }
+        },
+        {
+          "name": "random_forest",
+          "cv_mean": 0.799405,
+          "cv_std": 0.062274,
+          "best_params": {
+            "model__max_depth": 20,
+            "model__min_samples_leaf": 1,
+            "model__n_estimators": 600
+          }
+        },
+        {
+          "name": "logistic_regression",
+          "cv_mean": 0.790699,
+          "cv_std": 0.069973,
+          "best_params": {
+            "model__C": 0.1
+          }
+        }
+      ],
+      "n_features_original": 20,
+      "n_features_after_fe": 21,
+      "engineered_columns": [
+        "row_nan_count"
+      ],
+      "label_mapping": {
+        "1": "bad",
+        "0": "good"
+      },
+      "cv_score_is_holdout": false,
+      "error": null
+    }
+  }
+}

@@ -86,14 +86,18 @@ def test_guard_defaults_to_config_when_unset():
 
 @pytest.fixture(scope="module")
 def final_state():
-    # The Profiler (Day 7) and Planner (Day 8) are real; keep the wiring test
-    # offline + free by disabling their advisory LLM narratives (the deterministic
-    # facts and plan are still computed in full).
+    # Profiler/Planner/FE/Trainer are all real now (Days 7-9). Keep the wiring test
+    # offline + fast: disable the advisory LLM narratives and the FE LLM (so the
+    # deterministic default FE is used), and skip grid search (CV at default params).
+    # One Critic pass exercises the loop and the guard without paying for three real
+    # training runs; the router's guard is covered exhaustively above.
     mp = pytest.MonkeyPatch()
     mp.setenv("CREWML_PROFILER_LLM", "0")
     mp.setenv("CREWML_PLANNER_LLM", "0")
+    mp.setenv("CREWML_FE_LLM", "0")
+    mp.setenv("CREWML_TRAINER_PARAM_SEARCH", "0")
     app = build_crew()
-    st = initial_state(SPEC, max_iterations=3)
+    st = initial_state(SPEC, max_iterations=1)
     final = app.invoke(st, config={"recursion_limit": 50})
     mp.undo()
     return final
@@ -105,30 +109,32 @@ def test_run_terminates_at_reporter(final_state):
 
 
 def test_run_spends_full_budget_then_finalizes(final_state):
-    # Stub Critic always iterates, so the loop runs exactly max_iterations passes.
-    assert final_state["iteration"] == 3
-    assert len(final_state["critiques"]) == 3
+    # Stub Critic always iterates; with max_iterations=1 the guard finalises after
+    # exactly one pass.
+    assert final_state["iteration"] == 1
+    assert len(final_state["critiques"]) == 1
 
 
 def test_trace_is_the_expected_looped_sequence(final_state):
     expected = (
         ["profiler"]
-        + ["planner", "feature_engineer", "trainer", "critic"] * 3
+        + ["planner", "feature_engineer", "trainer", "critic"] * 1
         + ["ensembler", "reporter"]
     )
     assert final_state["trace"] == expected
 
 
 def test_all_produced_fields_populated(final_state):
-    for field in ("profile", "plan", "fe_code", "training", "ensemble", "report"):
+    for field in ("profile", "plan", "fe_code", "fe_meta", "training", "ensemble", "report"):
         assert final_state[field] is not None
 
 
 # --- Honesty: a stub can never masquerade as a real result ------------------
 
 def test_every_stub_payload_is_flagged(final_state):
-    # Profiler (Day 7) and Planner (Day 8) are real — the rest are still stubs.
-    for field in ("training", "ensemble", "report"):
+    # Profiler/Planner/FE/Trainer (Days 7-9) are real — Ensembler + Reporter remain
+    # stubs, as does the Critic (Day 10).
+    for field in ("ensemble", "report"):
         assert final_state[field].get("stub") is True
     assert all(c.get("stub") is True for c in final_state["critiques"])
 
@@ -151,9 +157,24 @@ def test_planner_is_real_not_a_stub(final_state):
     assert plan["recommended_primary_model"] == plan["candidate_models"][0]["name"]
 
 
-def test_trainer_emits_no_numeric_score(final_state):
-    # A stub must never surface a number that could read as a held-out result.
-    assert final_state["training"]["cv_score"] is None
+def test_feature_engineer_is_real_not_a_stub(final_state):
+    # The third stub retired: a validated add_features module + provenance.
+    meta = final_state["fe_meta"]
+    assert meta["source"] in {"default", "llm", "fallback"}
+    assert meta["validation"]["ok"] is True
+    assert "def add_features" in final_state["fe_code"]
+
+
+def test_trainer_is_real_with_a_cross_validated_score(final_state):
+    # The fourth stub retired: a real CV number, honestly labelled as NOT held-out.
+    training = final_state["training"]
+    assert training.get("stub") is False
+    assert isinstance(training["cv_score"], float)
+    assert training["cv_score_is_holdout"] is False
+    assert training["best_model"] in {
+        "hist_gradient_boosting", "random_forest", "logistic_regression"
+    }
+    assert "model.joblib" in training["artifacts"]
 
 
 def test_crew_source_never_references_the_holdout():

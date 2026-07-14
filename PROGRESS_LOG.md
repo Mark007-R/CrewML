@@ -282,3 +282,51 @@ Day-10 Critic, so the loop is functional on arrival — a no-op until a critique
 through the Day-6 sandboxed executor (its first real *generated*-code consumer), train the
 candidates under the planned CV, and return cross-validated metrics + artifacts. The crew's
 first real numbers land here.
+
+## Day 9 — 2026-07-14 · Phase 2 (MVP Crew)
+
+**Built:** the crew's **builders** — the **Feature Engineer** and **Trainer** — retiring
+two stubs and producing the crew's first real number + saved model, all on train only.
+
+- **Feature Engineer** (`crewml/crew/feature_engineer.py`): the first *generated-code*
+  node. `run_feature_engineer(plan, key)` produces a validated `add_features(df)` module.
+  A **row-wise, leakage-free default** (adds `row_nan_count`) always runs; when a live
+  provider is up it generates dataset-specific code and **trusts it only after executing
+  it in the Day-6 sandbox** and confirming it preserves the row count/index, keeps every
+  original column, and adds numeric columns — else it records why and **falls back**.
+  `meta.source ∈ {llm, default, fallback}`. New `fe_meta` state channel carries the
+  provenance + validation verdict.
+- **Trainer** (`crewml/crew/trainer.py`): the first *modeling* node. `run_trainer(plan,
+  fe_code, key)` assembles a training script from the plan + FE code and runs it in the
+  sandboxed executor over `train.parquet` only. It applies FE, builds a plan-driven
+  dtype-aware `ColumnTransformer` (median impute, a `SimpleImputer(missing_values=0)`
+  branch for disguised-missing, one-hot/ordinal by cardinality, scaling for linear
+  models), **cross-validates every candidate** under the plan's CV + scorer (optional
+  parallelised grid search, `class_weight='balanced'` when the imbalance strategy asks),
+  refits the best, and saves `model.joblib` + the exact `fe_source.py`. Binary targets are
+  mapped to 0/1 (1 = positive/rarer class) so `roc_auc` is the protocol's AUC.
+- **Real run** (`scripts/run_trainer.py --dataset credit-g`, grid search on): best =
+  **random_forest**, **CV roc_auc 0.7994 (+/-0.062)**; RF 0.799 > logistic 0.791 > HGB
+  0.770; FE `20 → 21` features; label map `{1: bad, 0: good}`. Committed to
+  `results/day09_training.json`. **This is a CV estimate on train, NOT a held-out score**
+  (`cv_score_is_holdout:false`) — the crew-vs-solo-vs-AutoML head-to-head on the sealed
+  split is **Day 12**.
+- **Honest degradation (again):** the FE live provider hit the same Groq
+  `organization_restricted` error; the trust gate caught it — `fe.source=fallback`, the
+  validated default was used, reason recorded, no LLM code passed off as real.
+- **163 tests pass, 3 skipped** (141 prior + 22 net new), suite **fully offline** (FE LLM
+  path via monkeypatched fakes): FE trust gate (default valid / good LLM used / row-dropping
+  or non-numeric LLM code rejected + fallback / provider failure degrades); real per-candidate
+  CV metrics + best-matches-max-CV; loadable `model.joblib` that predicts; **holdout seal
+  intact after training**; determinism (same seed ⇒ identical CV score); broken generation
+  reported not raised; structural no-peeking (neither module loads the holdout).
+
+**Honesty note:** every Day-9 number is cross-validation on train, labelled as such and
+re-checked against the holdout fingerprint. Generated code is guilty-until-validated; full
+self-repair (retry on traceback) is Day 20. Training fits the executor's 120 s node budget,
+so a future "crew beats AutoML" can't be an artifact of extra compute.
+
+**Next:** Day 10 — the **Critic**: diagnose the Trainer's CV result (overfit / underfit /
+leakage / imbalance / wrong metric), decide *iterate* vs *finalize*, and hand the Planner a
+specific directive — closing the feedback loop end-to-end (the Planner's response side is
+already wired).

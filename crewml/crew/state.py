@@ -44,7 +44,8 @@ class CrewState(TypedDict, total=False):
     # --- Produced by nodes as the crew works (None until produced) ---
     profile: Optional[dict[str, Any]]   # Profiler        (Day 7)  -> DataProfile
     plan: Optional[dict[str, Any]]      # Planner         (Day 8)  -> ModelingPlan
-    fe_code: Optional[str]              # Feature Engineer (Day 9) -> generated code
+    fe_code: Optional[str]              # Feature Engineer (Day 9) -> generated FE source
+    fe_meta: Optional[dict[str, Any]]   # Feature Engineer (Day 9) -> provenance + validation
     training: Optional[dict[str, Any]]  # Trainer         (Day 9)  -> CV metrics + artifact paths
     decision: Optional[str]             # Critic          (Day 10) -> "iterate" | "finalize"
     ensemble: Optional[dict[str, Any]]  # Ensembler       (Day 11) -> combined model info
@@ -73,6 +74,7 @@ def initial_state(spec: DatasetSpec, *, max_iterations: int) -> CrewState:
         profile=None,
         plan=None,
         fe_code=None,
+        fe_meta=None,
         training=None,
         decision=None,
         ensemble=None,

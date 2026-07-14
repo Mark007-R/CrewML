@@ -23,9 +23,11 @@ from __future__ import annotations
 from typing import Any
 
 from crewml.config import MAX_ITERATIONS
+from crewml.crew.feature_engineer import run_feature_engineer
 from crewml.crew.planner import run_planner
 from crewml.crew.profiler import run_profiler
 from crewml.crew.state import CrewState
+from crewml.crew.trainer import run_trainer
 
 
 def _stub(node: str, **fields: Any) -> dict[str, Any]:
@@ -69,21 +71,32 @@ def planner(state: CrewState) -> dict[str, Any]:
 
 
 def feature_engineer(state: CrewState) -> dict[str, Any]:
-    """Feature Engineer (stub). Day 9: generate FE code for the sandboxed executor."""
-    fe_code = "# FE code placeholder — generated + executed for real on Day 9\n"
-    return {"fe_code": fe_code, "trace": ["feature_engineer"]}
+    """Feature Engineer (REAL — Day 9). Generate + sandbox-validate ``add_features`` code.
+
+    The third stub retired: reads the Planner's ModelingPlan and produces a validated
+    row-wise, leakage-free ``add_features(df)`` module (see
+    :mod:`crewml.crew.feature_engineer`). When a live provider is configured it asks
+    for dataset-specific code and trusts it *only* after the sandbox confirms it honours
+    the contract; otherwise (mock mode, LLM disabled, or a failed generation) it falls
+    back to the deterministic default. The chosen source feeds the Trainer.
+    """
+    result = run_feature_engineer(state["plan"], state["dataset_key"])
+    return {"fe_code": result["code"], "fe_meta": result["meta"], "trace": ["feature_engineer"]}
 
 
 def trainer(state: CrewState) -> dict[str, Any]:
-    """Trainer (stub). Day 9: execute FE + train with CV; return metrics + artifact paths.
+    """Trainer (REAL — Day 9). Execute FE + train the candidates under CV; return metrics.
 
-    ``cv_score`` is ``None`` today on purpose: a stub must never emit a number
-    that could be mistaken for a real held-out result (EVAL_PROTOCOL §5).
+    The fourth stub retired: assembles a training script from the plan and the Feature
+    Engineer's validated code, runs it in the Day-6 sandboxed executor over the train
+    split, and returns cross-validated metrics + a saved model artifact (see
+    :mod:`crewml.crew.trainer`). The number it surfaces is a **CV estimate on train**,
+    never a held-out score — held-out scoring is a separate later step.
     """
-    training = _stub(
-        "trainer",
-        note="TrainingResult placeholder — real CV training lands Day 9.",
-        cv_score=None,
+    training = run_trainer(
+        state["plan"],
+        state["fe_code"],
+        state["dataset_key"],
         iteration=state.get("iteration", 0),
     )
     return {"training": training, "trace": ["trainer"]}
