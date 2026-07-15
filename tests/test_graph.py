@@ -86,15 +86,18 @@ def test_guard_defaults_to_config_when_unset():
 
 @pytest.fixture(scope="module")
 def final_state():
-    # Profiler/Planner/FE/Trainer are all real now (Days 7-9). Keep the wiring test
-    # offline + fast: disable the advisory LLM narratives and the FE LLM (so the
+    # Profiler/Planner/FE/Trainer/Critic are all real now (Days 7-10). Keep the wiring
+    # test offline + fast: disable the advisory LLM narratives and the FE LLM (so the
     # deterministic default FE is used), and skip grid search (CV at default params).
-    # One Critic pass exercises the loop and the guard without paying for three real
-    # training runs; the router's guard is covered exhaustively above.
+    # credit-g is a clean run, so the real Critic finalises on pass one; with
+    # max_iterations=1 the router's guard would finalise anyway. Either way exactly one
+    # loop passes through, which is what the wiring test needs; the router's guard is
+    # covered exhaustively above and the Critic's own logic in test_critic.py.
     mp = pytest.MonkeyPatch()
     mp.setenv("CREWML_PROFILER_LLM", "0")
     mp.setenv("CREWML_PLANNER_LLM", "0")
     mp.setenv("CREWML_FE_LLM", "0")
+    mp.setenv("CREWML_CRITIC_LLM", "0")
     mp.setenv("CREWML_TRAINER_PARAM_SEARCH", "0")
     app = build_crew()
     st = initial_state(SPEC, max_iterations=1)
@@ -108,9 +111,9 @@ def test_run_terminates_at_reporter(final_state):
     assert final_state["report"] is not None
 
 
-def test_run_spends_full_budget_then_finalizes(final_state):
-    # Stub Critic always iterates; with max_iterations=1 the guard finalises after
-    # exactly one pass.
+def test_run_makes_exactly_one_pass_then_finalizes(final_state):
+    # credit-g is clean, so the real Critic finalises on pass one; and with
+    # max_iterations=1 the guard would finalise anyway. Exactly one pass either way.
     assert final_state["iteration"] == 1
     assert len(final_state["critiques"]) == 1
 
@@ -132,11 +135,11 @@ def test_all_produced_fields_populated(final_state):
 # --- Honesty: a stub can never masquerade as a real result ------------------
 
 def test_every_stub_payload_is_flagged(final_state):
-    # Profiler/Planner/FE/Trainer (Days 7-9) are real — Ensembler + Reporter remain
-    # stubs, as does the Critic (Day 10).
+    # Profiler/Planner/FE/Trainer/Critic (Days 7-10) are real — only Ensembler +
+    # Reporter remain stubs.
     for field in ("ensemble", "report"):
         assert final_state[field].get("stub") is True
-    assert all(c.get("stub") is True for c in final_state["critiques"])
+    assert all(c.get("stub") is False for c in final_state["critiques"])
 
 
 def test_profiler_is_real_not_a_stub(final_state):
@@ -177,13 +180,26 @@ def test_trainer_is_real_with_a_cross_validated_score(final_state):
     assert "model.joblib" in training["artifacts"]
 
 
+def test_critic_is_real_with_a_decision(final_state):
+    # The fifth stub retired: a genuine critique that diagnoses and decides.
+    critique = final_state["critiques"][-1]
+    assert critique.get("stub") is False
+    assert critique["node"] == "critic"
+    assert critique["decision"] in {"iterate", "finalize"}
+    # credit-g is clean at default params -> nothing actionable -> finalize.
+    assert critique["decision"] == "finalize"
+    assert critique["finding_codes"] == []
+    assert isinstance(critique["cv_score"], float)
+
+
 def test_crew_source_never_references_the_holdout():
     # Structural no-peeking: no crew-package module names the holdout loader.
     for mod in (crew_nodes,
                 __import__("crewml.crew.state", fromlist=["x"]),
                 __import__("crewml.crew.graph", fromlist=["x"]),
                 __import__("crewml.crew.profiler", fromlist=["x"]),
-                __import__("crewml.crew.planner", fromlist=["x"])):
+                __import__("crewml.crew.planner", fromlist=["x"]),
+                __import__("crewml.crew.critic", fromlist=["x"])):
         src = inspect.getsource(mod)
         assert "load_holdout" not in src
         assert "holdout" not in src.lower()

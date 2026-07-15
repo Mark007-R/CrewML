@@ -4,6 +4,7 @@ Phase 2 builds this out day by day. Day 5 ships the skeleton: the shared
 :class:`CrewState`, seven node stubs, and the wired graph with the Critic loop
 and its ``max_iterations`` guard. Real agents replace the stubs on Days 7-11.
 """
+from crewml.crew.critic import build_critique, diagnose, run_critic
 from crewml.crew.feature_engineer import run_feature_engineer
 from crewml.crew.graph import CREW_NODES, build_crew, build_graph
 from crewml.crew.nodes import route_after_critic
@@ -25,4 +26,7 @@ __all__ = [
     "run_planner",
     "run_feature_engineer",
     "run_trainer",
+    "diagnose",
+    "build_critique",
+    "run_critic",
 ]

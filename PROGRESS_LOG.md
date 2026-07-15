@@ -330,3 +330,52 @@ so a future "crew beats AutoML" can't be an artifact of extra compute.
 leakage / imbalance / wrong metric), decide *iterate* vs *finalize*, and hand the Planner a
 specific directive — closing the feedback loop end-to-end (the Planner's response side is
 already wired).
+
+## Day 10 — 2026-07-15 · Phase 2 (MVP Crew)
+
+**Built:** the crew's **reviewer** — the **Critic** — retiring the fifth stub and closing
+the feedback loop. The pipeline stops being a straight line and becomes a team that learns
+from its own first attempt.
+
+- **Critic** (`crewml/crew/critic.py`): the node that reads the Trainer's CV result + the
+  profile + the plan and **diagnoses deterministically** — leakage (an undropped
+  target-leakage suspect, or an implausibly-high score ≥ 0.995 roc_auc / 0.999 r2),
+  imbalance (skew flagged but not effectively handled — weighting off, or the winning model
+  can't take class weights), underfit (score at/below a per-metric floor), overfit
+  (fold-to-fold variance `cv_std/|cv_mean| ≥ 0.15`), wrong-metric (scorer ≠ primary metric),
+  and exec failure (reported as a blocker; self-repair is Day 20). Each finding embeds the
+  **keyword the Planner's `_apply_critique` acts on** + a specific directive, so a diagnosis
+  becomes a concrete plan change.
+- **`decide(...)`**: iterate only on an actionable issue, under budget, and still making
+  progress; finalize on clean / failure / spent-budget / **diminishing returns** (Δscore <
+  0.002 and no new issue). The router's `max_iterations` guard is the hard backstop on top.
+- **Optional LLM review note** layered on top, never in place of, the deterministic verdict.
+- **Node wired in** (`nodes.py::critic` → `run_critic`); the Day-5 stub (which always
+  iterated, so skeleton runs always burned the full budget) is gone. Topology + schema
+  unchanged.
+- **Full loop run** (`scripts/run_critic.py --all`, grid search on) → committed
+  `results/day10_critiques.json`: **all 5 datasets clean → finalize on pass 1**
+  (credit-g roc_auc 0.7994, diabetes 0.8372, vehicle f1_macro 0.7931, cpu_small r2 0.9779,
+  kin8nm r2 0.8214). The real Critic runs the Planner **once** on a clean run where the stub
+  burned 3 iterations — knowing when *not* to iterate is the point. Scores are **CV on train**
+  (`cv_score_is_holdout:false`), identical to Day 9 (the Critic reads the number, doesn't
+  perturb it); crew-vs-solo-vs-AutoML on the sealed split is **Day 12**.
+- **Honest degradation (again):** the Critic's live narrative hit the same Groq
+  `organization_restricted` error (3rd day); narrative `unavailable`, decision stands on the
+  deterministic core — no model got a vote on whether to iterate.
+- **188 tests pass, 3 skipped** (163 prior + 25 net new), suite **fully offline**: every
+  diagnosis branch vs a crafted scenario; the hand-off lands (a Critic overfit finding
+  tightens a real Planner RF grid); decision logic (finalize on clean/fail/budget/diminishing,
+  iterate on actionable/improving/new-issue); **end-to-end convergence** — a monkeypatched
+  full-graph run opens the loop on a planted finding (Planner runs twice) and closes itself
+  before the guard; the Critic never loads the holdout.
+
+**Honesty note:** "overfit" here is CV fold-instability, not a train-vs-holdout gap (the crew
+can't see the holdout yet, by construction). A clean finalize is a real deliverable — a sound
+decision + a closed loop — with the iterate path proven by tests since the five sound plans
+give the Critic nothing to catch. The loop cannot run away: Critic convergence + the hard
+`max_iterations` guard.
+
+**Next:** Day 11 (Phase 2 finale) — the **Ensembler + Reporter**: combine the best models,
+write the final report + `MODEL_CARD.md`, first full end-to-end crew run with every node real.
+Phase 2 wrap-up + PR merge.

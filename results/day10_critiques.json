@@ -1,0 +1,164 @@
+{
+  "datasets": {
+    "credit-g": {
+      "dataset_key": "credit-g",
+      "task": "classification",
+      "subtype": "binary",
+      "metric": "roc_auc",
+      "iterations_run": 1,
+      "max_iterations": 3,
+      "final_decision": "finalize",
+      "trace": [
+        "profiler",
+        "planner",
+        "feature_engineer",
+        "trainer",
+        "critic",
+        "ensembler",
+        "reporter"
+      ],
+      "final_cv_score": 0.799405,
+      "critic_passes": [
+        {
+          "iteration": 1,
+          "decision": "finalize",
+          "reason": "no actionable failure modes found \u2014 the run is clean, finalising",
+          "cv_score": 0.799405,
+          "score_delta_vs_prev": null,
+          "best_model": "random_forest",
+          "finding_codes": [],
+          "findings": []
+        }
+      ],
+      "cv_score_is_holdout": false
+    },
+    "diabetes": {
+      "dataset_key": "diabetes",
+      "task": "classification",
+      "subtype": "binary",
+      "metric": "roc_auc",
+      "iterations_run": 1,
+      "max_iterations": 3,
+      "final_decision": "finalize",
+      "trace": [
+        "profiler",
+        "planner",
+        "feature_engineer",
+        "trainer",
+        "critic",
+        "ensembler",
+        "reporter"
+      ],
+      "final_cv_score": 0.83718,
+      "critic_passes": [
+        {
+          "iteration": 1,
+          "decision": "finalize",
+          "reason": "no actionable failure modes found \u2014 the run is clean, finalising",
+          "cv_score": 0.83718,
+          "score_delta_vs_prev": null,
+          "best_model": "logistic_regression",
+          "finding_codes": [],
+          "findings": []
+        }
+      ],
+      "cv_score_is_holdout": false
+    },
+    "vehicle": {
+      "dataset_key": "vehicle",
+      "task": "classification",
+      "subtype": "multiclass",
+      "metric": "f1_macro",
+      "iterations_run": 1,
+      "max_iterations": 3,
+      "final_decision": "finalize",
+      "trace": [
+        "profiler",
+        "planner",
+        "feature_engineer",
+        "trainer",
+        "critic",
+        "ensembler",
+        "reporter"
+      ],
+      "final_cv_score": 0.793108,
+      "critic_passes": [
+        {
+          "iteration": 1,
+          "decision": "finalize",
+          "reason": "no actionable failure modes found \u2014 the run is clean, finalising",
+          "cv_score": 0.793108,
+          "score_delta_vs_prev": null,
+          "best_model": "logistic_regression",
+          "finding_codes": [],
+          "findings": []
+        }
+      ],
+      "cv_score_is_holdout": false
+    },
+    "cpu_small": {
+      "dataset_key": "cpu_small",
+      "task": "regression",
+      "subtype": "regression",
+      "metric": "r2",
+      "iterations_run": 1,
+      "max_iterations": 3,
+      "final_decision": "finalize",
+      "trace": [
+        "profiler",
+        "planner",
+        "feature_engineer",
+        "trainer",
+        "critic",
+        "ensembler",
+        "reporter"
+      ],
+      "final_cv_score": 0.977949,
+      "critic_passes": [
+        {
+          "iteration": 1,
+          "decision": "finalize",
+          "reason": "no actionable failure modes found \u2014 the run is clean, finalising",
+          "cv_score": 0.977949,
+          "score_delta_vs_prev": null,
+          "best_model": "hist_gradient_boosting",
+          "finding_codes": [],
+          "findings": []
+        }
+      ],
+      "cv_score_is_holdout": false
+    },
+    "kin8nm": {
+      "dataset_key": "kin8nm",
+      "task": "regression",
+      "subtype": "regression",
+      "metric": "r2",
+      "iterations_run": 1,
+      "max_iterations": 3,
+      "final_decision": "finalize",
+      "trace": [
+        "profiler",
+        "planner",
+        "feature_engineer",
+        "trainer",
+        "critic",
+        "ensembler",
+        "reporter"
+      ],
+      "final_cv_score": 0.821448,
+      "critic_passes": [
+        {
+          "iteration": 1,
+          "decision": "finalize",
+          "reason": "no actionable failure modes found \u2014 the run is clean, finalising",
+          "cv_score": 0.821448,
+          "score_delta_vs_prev": null,
+          "best_model": "hist_gradient_boosting",
+          "finding_codes": [],
+          "findings": []
+        }
+      ],
+      "cv_score_is_holdout": false
+    }
+  }
+}

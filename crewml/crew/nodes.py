@@ -23,6 +23,7 @@ from __future__ import annotations
 from typing import Any
 
 from crewml.config import MAX_ITERATIONS
+from crewml.crew.critic import run_critic
 from crewml.crew.feature_engineer import run_feature_engineer
 from crewml.crew.planner import run_planner
 from crewml.crew.profiler import run_profiler
@@ -105,24 +106,29 @@ def trainer(state: CrewState) -> dict[str, Any]:
 # --- Critic + its conditional edge -----------------------------------------
 
 def critic(state: CrewState) -> dict[str, Any]:
-    """Critic (stub). Day 10: diagnose overfit / leakage / imbalance / wrong metric.
+    """Critic (REAL — Day 10). Diagnose the training pass, decide iterate vs finalize.
 
-    The stub always requests another iteration — it stands in for "there is
-    always something a real Critic could flag" — so that a plain skeleton run
-    genuinely drives the loop and the ``max_iterations`` guard is what stops it
-    (rather than the stub politely finalising on pass one). ``iteration`` counts
-    completed Critic passes; :func:`route_after_critic` reads it.
+    The fifth stub retired, and the node that closes the loop: reads the Trainer's
+    cross-validated result together with the profile and the plan, diagnoses the
+    failure modes a competent reviewer looks for (overfit / underfit / leakage /
+    imbalance / wrong-metric), and decides whether another pass earns its keep (see
+    :mod:`crewml.crew.critic`). Its findings embed the keywords the Planner's
+    ``_apply_critique`` acts on, so an ``iterate`` decision turns into a concrete plan
+    change on re-entry. ``iteration`` counts completed Critic passes;
+    :func:`route_after_critic` reads it and applies the hard ``max_iterations`` guard.
     """
     it = state.get("iteration", 0) + 1
-    critique = _stub(
-        "critic",
+    critique = run_critic(
+        state["profile"],
+        state["plan"],
+        state["training"],
+        critiques_so_far=state.get("critiques") or [],
         iteration=it,
-        decision="iterate",
-        findings=["placeholder diagnosis — real critique lands Day 10"],
+        max_iterations=int(state.get("max_iterations", MAX_ITERATIONS)),
     )
     return {
         "iteration": it,
-        "decision": "iterate",
+        "decision": critique["decision"],
         "critiques": [critique],
         "trace": ["critic"],
     }
