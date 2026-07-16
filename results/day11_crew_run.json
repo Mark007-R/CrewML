@@ -1,0 +1,199 @@
+{
+  "datasets": {
+    "credit-g": {
+      "dataset_key": "credit-g",
+      "task": "classification",
+      "subtype": "binary",
+      "metric": "roc_auc",
+      "iterations_run": 1,
+      "max_iterations": 3,
+      "final_decision": "finalize",
+      "trace": [
+        "profiler",
+        "planner",
+        "feature_engineer",
+        "trainer",
+        "critic",
+        "ensembler",
+        "reporter"
+      ],
+      "final_model": {
+        "kind": "single",
+        "chosen": "single",
+        "members": [
+          "random_forest",
+          "logistic_regression",
+          "hist_gradient_boosting"
+        ],
+        "single_best_model": "random_forest",
+        "final_cv_score": 0.799405,
+        "ensemble_cv_score": 0.795536,
+        "single_best_cv_score": 0.799405,
+        "improvement_over_single": -0.003869
+      },
+      "ensemble_attempted": true,
+      "holdout_untouched": true,
+      "warnings": [
+        "All scores are CROSS-VALIDATED estimates on the train split (cv_score_is_holdout: false); the sealed held-out score is Phase 3.",
+        "No advisory LLM narrative ran live this run; every decision stands on the deterministic core."
+      ],
+      "cv_score_is_holdout": false
+    },
+    "diabetes": {
+      "dataset_key": "diabetes",
+      "task": "classification",
+      "subtype": "binary",
+      "metric": "roc_auc",
+      "iterations_run": 1,
+      "max_iterations": 3,
+      "final_decision": "finalize",
+      "trace": [
+        "profiler",
+        "planner",
+        "feature_engineer",
+        "trainer",
+        "critic",
+        "ensembler",
+        "reporter"
+      ],
+      "final_model": {
+        "kind": "single",
+        "chosen": "single",
+        "members": [
+          "logistic_regression",
+          "random_forest",
+          "hist_gradient_boosting"
+        ],
+        "single_best_model": "logistic_regression",
+        "final_cv_score": 0.83718,
+        "ensemble_cv_score": 0.8224,
+        "single_best_cv_score": 0.83718,
+        "improvement_over_single": -0.01478
+      },
+      "ensemble_attempted": true,
+      "holdout_untouched": true,
+      "warnings": [
+        "All scores are CROSS-VALIDATED estimates on the train split (cv_score_is_holdout: false); the sealed held-out score is Phase 3.",
+        "No advisory LLM narrative ran live this run; every decision stands on the deterministic core."
+      ],
+      "cv_score_is_holdout": false
+    },
+    "vehicle": {
+      "dataset_key": "vehicle",
+      "task": "classification",
+      "subtype": "multiclass",
+      "metric": "f1_macro",
+      "iterations_run": 1,
+      "max_iterations": 3,
+      "final_decision": "finalize",
+      "trace": [
+        "profiler",
+        "planner",
+        "feature_engineer",
+        "trainer",
+        "critic",
+        "ensembler",
+        "reporter"
+      ],
+      "final_model": {
+        "kind": "single",
+        "chosen": "single",
+        "members": [
+          "logistic_regression",
+          "hist_gradient_boosting",
+          "random_forest"
+        ],
+        "single_best_model": "logistic_regression",
+        "final_cv_score": 0.793108,
+        "ensemble_cv_score": 0.781353,
+        "single_best_cv_score": 0.793108,
+        "improvement_over_single": -0.011755
+      },
+      "ensemble_attempted": true,
+      "holdout_untouched": true,
+      "warnings": [
+        "All scores are CROSS-VALIDATED estimates on the train split (cv_score_is_holdout: false); the sealed held-out score is Phase 3.",
+        "No advisory LLM narrative ran live this run; every decision stands on the deterministic core."
+      ],
+      "cv_score_is_holdout": false
+    },
+    "cpu_small": {
+      "dataset_key": "cpu_small",
+      "task": "regression",
+      "subtype": "regression",
+      "metric": "r2",
+      "iterations_run": 1,
+      "max_iterations": 3,
+      "final_decision": "finalize",
+      "trace": [
+        "profiler",
+        "planner",
+        "feature_engineer",
+        "trainer",
+        "critic",
+        "ensembler",
+        "reporter"
+      ],
+      "final_model": {
+        "kind": "single",
+        "chosen": "single",
+        "members": [
+          "hist_gradient_boosting",
+          "random_forest",
+          "ridge"
+        ],
+        "single_best_model": "hist_gradient_boosting",
+        "final_cv_score": 0.977949,
+        "ensemble_cv_score": 0.948552,
+        "single_best_cv_score": 0.977949,
+        "improvement_over_single": -0.029397
+      },
+      "ensemble_attempted": true,
+      "holdout_untouched": true,
+      "warnings": [
+        "All scores are CROSS-VALIDATED estimates on the train split (cv_score_is_holdout: false); the sealed held-out score is Phase 3.",
+        "No advisory LLM narrative ran live this run; every decision stands on the deterministic core."
+      ],
+      "cv_score_is_holdout": false
+    },
+    "kin8nm": {
+      "dataset_key": "kin8nm",
+      "task": "regression",
+      "subtype": "regression",
+      "metric": "r2",
+      "iterations_run": 1,
+      "max_iterations": 3,
+      "final_decision": "finalize",
+      "trace": [
+        "profiler",
+        "planner",
+        "feature_engineer",
+        "trainer",
+        "critic",
+        "ensembler",
+        "reporter"
+      ],
+      "final_model": {
+        "kind": "single",
+        "chosen": "single",
+        "members": [
+          "hist_gradient_boosting",
+          "random_forest",
+          "ridge"
+        ],
+        "single_best_model": "hist_gradient_boosting",
+        "final_cv_score": 0.821448,
+        "ensemble_cv_score": 0.713769,
+        "single_best_cv_score": 0.821448,
+        "improvement_over_single": -0.107678
+      },
+      "ensemble_attempted": true,
+      "holdout_untouched": true,
+      "warnings": [
+        "All scores are CROSS-VALIDATED estimates on the train split (cv_score_is_holdout: false); the sealed held-out score is Phase 3.",
+        "No advisory LLM narrative ran live this run; every decision stands on the deterministic core."
+      ],
+      "cv_score_is_holdout": false
+    }
+  }
+}

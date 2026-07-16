@@ -1,15 +1,16 @@
-"""Day 5 guards: the Phase-2 crew skeleton is wired, bounded, and honest.
+"""Day 5 → Day 11 guards: the crew is wired, bounded, honest — and now fully real.
 
-The node bodies are stubs, so these tests assert *control flow*, not model
-quality:
+The topology + router assertions are the original Day-5 wiring guards; as of Day 11
+every node body is a real specialist, so the end-to-end assertions now check the real
+product:
 
   * the graph compiles and contains exactly the seven crew nodes;
   * the conditional Critic router honours the decision AND the ``max_iterations``
     guard (the guard wins even when the Critic wants to iterate);
-  * a full skeleton invocation drives the loop to its budget, finalises, and
-    terminates at the Reporter with a growing critique/trace history;
-  * nothing a stub emits could pass for a real result (no numeric held-out score,
-    everything flagged ``stub``); the held-out set is never referenced.
+  * a full invocation runs the loop, finalises, and terminates at the Reporter with a
+    growing critique/trace history and every produced field populated;
+  * nothing masquerades as a held-out result — every score is a labelled CV-on-train
+    estimate; the held-out set is never referenced by any crew module.
 """
 from __future__ import annotations
 
@@ -132,14 +133,42 @@ def test_all_produced_fields_populated(final_state):
         assert final_state[field] is not None
 
 
-# --- Honesty: a stub can never masquerade as a real result ------------------
+# --- Honesty: every node is real now; nothing is flagged as a stub ----------
 
-def test_every_stub_payload_is_flagged(final_state):
-    # Profiler/Planner/FE/Trainer/Critic (Days 7-10) are real — only Ensembler +
-    # Reporter remain stubs.
-    for field in ("ensemble", "report"):
-        assert final_state[field].get("stub") is True
+def test_no_node_payload_is_a_stub(final_state):
+    # Day 11 retired the last two stubs (Ensembler + Reporter): every produced
+    # payload that carries a stub flag is now from a real specialist. (fe_meta is
+    # provenance, not a node payload, so it carries no stub flag by design.)
+    for field in ("profile", "plan", "training", "ensemble", "report"):
+        assert final_state[field].get("stub") is False
     assert all(c.get("stub") is False for c in final_state["critiques"])
+
+
+def test_ensembler_is_real_and_compares_against_the_single_best(final_state):
+    # The sixth stub retired: a real CV comparison of an ensemble vs. the single best.
+    ens = final_state["ensemble"]
+    assert ens.get("stub") is False and ens["node"] == "ensembler"
+    assert ens["attempted"] is True and ens["ok"] is True
+    assert ens["chosen"] in {"ensemble", "single"}
+    # Both sides scored, self-consistently, and the crew never ships worse than the single.
+    assert isinstance(ens["ensemble_cv_score"], float)
+    assert isinstance(ens["single_best_cv_score"], float)
+    assert ens["final_cv_score"] >= ens["single_best_cv_score"] - 1e-9
+    assert ens["cv_score_is_holdout"] is False
+    assert "final_model.joblib" in ens["artifacts"]
+
+
+def test_reporter_is_real_with_a_model_card(final_state):
+    # The last stub retired: a synthesised report + a model card, deterministically.
+    report = final_state["report"]
+    assert report.get("stub") is False and report["node"] == "reporter"
+    assert report["final_model"]["kind"] in {"ensemble", "single"}
+    assert isinstance(report["final_model"]["cv_score"], float)
+    assert report["cv_score_is_holdout"] is False
+    card = report["model_card_markdown"]
+    assert "Model Card" in card and "cross-validated estimate" in card
+    # The honesty caveat is surfaced, not buried.
+    assert any("held-out" in w for w in report["warnings"])
 
 
 def test_profiler_is_real_not_a_stub(final_state):
@@ -203,3 +232,12 @@ def test_crew_source_never_references_the_holdout():
         src = inspect.getsource(mod)
         assert "load_holdout" not in src
         assert "holdout" not in src.lower()
+
+    # The Ensembler + Reporter (Day 11) carry the `cv_score_is_holdout` honesty flag and
+    # name the held-out split in their prose, so the bare-substring check doesn't fit —
+    # the meaningful structural guarantee is that they never call the held-out LOADER.
+    for mod in (__import__("crewml.crew.ensembler", fromlist=["x"]),
+                __import__("crewml.crew.reporter", fromlist=["x"])):
+        src = inspect.getsource(mod)
+        assert "load_holdout" not in src
+        assert "holdout_path" not in src

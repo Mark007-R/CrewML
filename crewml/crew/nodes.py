@@ -8,15 +8,15 @@ bodies are deliberately hollow — they emit clearly-labelled placeholders
 to prove the graph is wired: the control flow, the Critic loop, and the
 ``max_iterations`` guard all exercise end-to-end with these stubs in place.
 
-Days 7-11 replace each body with a real agent, one at a time, without changing
+Days 7-11 replaced each body with a real agent, one at a time, without changing
 the graph topology or the state schema:
 
     Profiler (Day 7) · Planner (Day 8) · Feature Engineer + Trainer (Day 9)
     Critic (Day 10) · Ensembler + Reporter (Day 11)
 
-The one piece of *real* control logic that ships today is :func:`route_after_critic`
-— the conditional edge out of the Critic — because the loop budget is a safety
-property, not a stub.
+As of Day 11 every node is real — no stubs remain. The one piece of *real* control
+logic that shipped on Day 5 is :func:`route_after_critic` — the conditional edge out
+of the Critic — because the loop budget is a safety property.
 """
 from __future__ import annotations
 
@@ -24,16 +24,13 @@ from typing import Any
 
 from crewml.config import MAX_ITERATIONS
 from crewml.crew.critic import run_critic
+from crewml.crew.ensembler import run_ensembler
 from crewml.crew.feature_engineer import run_feature_engineer
 from crewml.crew.planner import run_planner
 from crewml.crew.profiler import run_profiler
+from crewml.crew.reporter import run_reporter
 from crewml.crew.state import CrewState
 from crewml.crew.trainer import run_trainer
-
-
-def _stub(node: str, **fields: Any) -> dict[str, Any]:
-    """A uniform placeholder payload so reports can see which nodes are still stubs."""
-    return {"stub": True, "node": node, **fields}
 
 
 # --- Linear front half: Profiler -> Planner -> Feature Engineer -> Trainer ---
@@ -155,27 +152,35 @@ def route_after_critic(state: CrewState) -> str:
 # --- Finalise: Ensembler -> Reporter ---------------------------------------
 
 def ensembler(state: CrewState) -> dict[str, Any]:
-    """Ensembler (stub). Day 11: combine the best models from the run's trials."""
-    ensemble = _stub(
-        "ensembler",
-        note="Ensemble placeholder — real model combination lands Day 11.",
-        n_iterations_run=state.get("iteration", 0),
+    """Ensembler (REAL — Day 11). Combine the top candidates; keep only if it beats the best.
+
+    The sixth stub retired: builds a soft-voting (classification) / averaging (regression)
+    ensemble over the top CV-ranked candidates — each with the Trainer's best params — and
+    cross-validates it against the single best model on the *same* seeded folds inside the
+    sandbox (see :mod:`crewml.crew.ensembler`). The crew ships whichever scores higher, so
+    the final model is never worse than the Trainer already had. Every number is a CV
+    estimate on train; the held-out split is untouched. On a failed/too-thin run it records an
+    honest "not attempted" and keeps the Trainer's model.
+    """
+    ensemble = run_ensembler(
+        state["plan"],
+        state["training"],
+        state["fe_code"],
+        state["dataset_key"],
+        iteration=state.get("iteration", 0),
     )
     return {"ensemble": ensemble, "trace": ["ensembler"]}
 
 
 def reporter(state: CrewState) -> dict[str, Any]:
-    """Reporter (stub). Day 11: write the final report + MODEL_CARD.md.
+    """Reporter (REAL — Day 11). Synthesise the final report + write MODEL_CARD.md.
 
-    Terminal node — emits a summary of the run's control flow so the skeleton has
-    an observable end product even before any real modeling exists.
+    The last stub retired, and the crew's terminal node: reads the full final state
+    (profile, plan, FE, training, critiques, ensemble) and renders a structured report
+    plus a model card — deterministically, no LLM (see :mod:`crewml.crew.reporter`). It
+    surfaces the honesty caveats (scores are CV-on-train not held-out, any degraded/mock
+    narratives, a training failure) so a reader can't miss them, and writes the card +
+    a JSON copy to the run's git-ignored artifact dir.
     """
-    report = _stub(
-        "reporter",
-        note="Final report placeholder — real report + model card land Day 11.",
-        dataset_key=state["dataset_key"],
-        iterations_run=state.get("iteration", 0),
-        n_critiques=len(state.get("critiques") or []),
-        stub_run=True,
-    )
+    report = run_reporter(state)
     return {"report": report, "trace": ["reporter"]}

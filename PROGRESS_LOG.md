@@ -379,3 +379,51 @@ give the Critic nothing to catch. The loop cannot run away: Critic convergence +
 **Next:** Day 11 (Phase 2 finale) — the **Ensembler + Reporter**: combine the best models,
 write the final report + `MODEL_CARD.md`, first full end-to-end crew run with every node real.
 Phase 2 wrap-up + PR merge.
+
+---
+
+## Day 11 — 2026-07-16 · Phase 2 (MVP Crew) — **finale**
+
+**Shipped:** The **Ensembler + Reporter** — the last two stubs retired; **first full
+end-to-end crew run with every node real**. Phase 2 complete.
+
+- **`crewml/crew/ensembler.py`** — builds a **soft-voting** (classification) / **averaging**
+  (regression) ensemble over the top CV-ranked candidates, each with the Trainer's best params,
+  and cross-validates it against the single best **on the same seeded folds, in the sandbox, on
+  train**. **Keeps the ensemble only if it beats the single best**, else keeps the simpler single
+  model — so the final model is `max(ensemble, single)`, **never worse** than the Trainer had.
+  Config derived from `trainer._training_config` so preprocessing is byte-for-byte identical; the
+  single re-score is self-consistent (reproduces the Trainer's number). Failed/too-thin runs →
+  honest "not attempted", never a crash.
+- **`crewml/crew/reporter.py`** — the terminal node: `build_report` + `render_model_card` (both
+  pure) + `run_reporter` (writes `MODEL_CARD.md` + `report.json`). **Deterministic, no LLM** — it
+  synthesises decisions the specialists already made and **surfaces the honesty caveats**
+  (scores are CV-on-train not held-out; mock/degraded narratives flagged; training failure
+  reported honestly; executor is process-isolation not security).
+- **Both nodes wired in** (`nodes.py`); `_stub` helper removed. Graph topology + state schema
+  unchanged. New driver `scripts/run_crew.py` (rewritten) → committed `results/day11_crew_run.json`
+  + `results/sample_model_card.md`.
+- **First full end-to-end run, all 5 datasets, grid search on:** every dataset finalised on pass 1
+  and the Ensembler **declined the ensemble every time** (the tuned single best beat the
+  equal-weight vote of three unequal candidates) → shipped **single**: credit-g roc_auc **0.7994**
+  (rf), diabetes **0.8372** (logreg), vehicle f1_macro **0.7931** (logreg), cpu_small r2 **0.9779**
+  (hgb), kin8nm r2 **0.8214** (hgb) — exactly the Day-10 tuned numbers, **never a point worse**.
+  Holdout re-verified sealed after each. The *win* path is proven in the **untuned regime**
+  (default-param credit-g: ensemble 0.7972 **beats** single 0.7940, and the Ensembler keeps it).
+- **214 tests pass, 3 skipped** (188 prior + 26 net new), suite **fully offline**: Ensembler (real
+  combination; single re-score reproduces the Trainer; final never worse than single; loadable
+  combined model; regression averages; determinism; failed/thin fallbacks; no-peeking); Reporter
+  (faithful synthesis; card states CV-not-holdout; warnings flag mock/no-LLM/failure; pure render;
+  no-peeking); graph (full run ends at a real Reporter, every node non-stub).
+
+**Honesty note:** the Ensembler kept the single model on all five **tuned** runs — a **win for the
+design** (keep-only-if-it-helps), not a null result; both branches are exercised on real data.
+Every score is **CV on train** (`cv_score_is_holdout:false`); the crew-vs-solo-vs-AutoML head-to-head
+on the **sealed split** is Day 12. Narratives run with `--no-llm` for the committed run, so the
+deterministic core stands alone.
+
+**Phase 2 wrap:** all seven nodes real (Skeleton→Executor→Profiler→Planner→FE+Trainer→Critic→
+Ensembler+Reporter), a working critique loop, **214 offline tests**, and the crew runs a dataset raw
+→ model + model card on its own — never loading the held-out split. **Next:** Day 12 (Phase 3 opens)
+— score the crew's final models on the **LOCKED holdout** head-to-head vs. the solo agent + FLAML
+AutoML ceiling.
