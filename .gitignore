@@ -7,6 +7,9 @@
 crewml-builder_SKILL.md
 crewml-post_SKILL.md
 
+# --- Social post drafts (local only, never pushed) ---
+POSTS_LOG.md
+
 # --- Data & model artifacts (kept local; reproduced from manifest) ---
 data/
 models/
