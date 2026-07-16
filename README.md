@@ -29,8 +29,7 @@ against the training data.
 
 ## Honest evaluation
 
-The project lives or dies on its evaluation, spelled out in
-[`docs/EVAL_PROTOCOL.md`](docs/EVAL_PROTOCOL.md):
+The project lives or dies on its evaluation. The protocol, in full:
 
 - 5 pinned OpenML datasets (2 binary, 1 multiclass, 2 regression).
 - One split, seed-locked, into `train` (all the crew ever touches) and a
@@ -85,12 +84,16 @@ on the two small binary sets. Per-dataset, the bar the crew must clear is the
 
 ## Status
 
-Built in the open over 30 days. See [`PROGRESS_LOG.md`](PROGRESS_LOG.md) for the
-daily trail and `reports/` / `explainers/` for the per-day write-ups.
+Built in the open over 30 days. Every committed run leaves its numbers in
+[`results/`](results/) — including the crew's end-to-end run
+([`day11_crew_run.json`](results/day11_crew_run.json)) and a generated
+[model card](results/sample_model_card.md).
 
 - **Phase 1 — Foundation & Baselines** (Days 1–4) ✓ complete
-- **Phase 2 — MVP Crew** (Days 5–11) ← in progress · Day 5: LangGraph skeleton (state + wired graph + Critic loop/guard)
-- Phase 3 — Comparison Studies (Days 12–18)
+- **Phase 2 — MVP Crew** (Days 5–11) ✓ complete · all seven nodes real — the crew takes a raw
+  dataset to a trained model + model card on its own, with a working Critic loop
+- Phase 3 — Comparison Studies (Days 12–18) ← next: the crew meets the **locked holdout**,
+  head-to-head vs. the solo agent and the AutoML ceiling
 - Phase 4 — Hardening & Safety (Days 19–23)
 - Phase 5 — Production Wrapper (Days 24–27)
 - Phase 6 — Ship (Days 28–30)
