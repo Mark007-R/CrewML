@@ -119,5 +119,7 @@ def write_table() -> dict:
     """Assemble, persist (JSON + markdown), and return the leaderboard."""
     table = assemble_table()
     TABLE_JSON_PATH.write_text(json.dumps(table, indent=2))
-    TABLE_MD_PATH.write_text(render_markdown(table))
+    # Explicit UTF-8: the table renders em dashes and R², which a default cp1252
+    # encoding on Windows mangles into replacement characters.
+    TABLE_MD_PATH.write_text(render_markdown(table), encoding="utf-8")
     return table
