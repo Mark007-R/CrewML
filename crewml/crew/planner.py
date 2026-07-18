@@ -308,6 +308,56 @@ def _apply_critique(plan: dict[str, Any], critique: Optional[dict[str, Any]]) ->
     plan["critique_adjustments"] = adjustments
 
 
+# --- Ablation instrumentation (Day 13) — OFF unless explicitly enabled -------
+
+def _apply_ablation_handicap(plan: dict[str, Any], iteration: int) -> None:
+    """Cripple the FIRST pass's model capacity — ablation instrumentation only.
+
+    Gated behind ``CREWML_ABLATION_HANDICAP`` (default ``"0"`` — a normal run never
+    touches this). It exists for one purpose: the Critic loop is a *conditional*
+    safeguard, so on healthy datasets the Critic correctly finalises on pass 1 and the
+    loop never fires — which makes its contribution invisible to measure. This hook
+    collapses every capacity knob on the first pass to a near-stump so the winning CV
+    score falls at/below the Critic's underfit floor. Then the loop's value becomes
+    observable: *with* the Critic, an ``underfit`` finding fires and the Planner restores
+    capacity on the next pass (:func:`_apply_critique`); *without* it (the ``no_critic``
+    variant), the crew ships the crippled model. The gap between the two is the loop's
+    contribution, cleanly attributable.
+
+    Only the first pass (``iteration == 0``) is handicapped — recovery on later passes is
+    exactly the loop's job, not something this hook grants for free.
+    """
+    if os.getenv("CREWML_ABLATION_HANDICAP", "0") == "0":
+        return
+    if int(iteration) != 0:
+        return
+    for m in plan["candidate_models"]:
+        g = m["param_grid"]
+        if "model__max_iter" in g:
+            g["model__max_iter"] = [1]
+        if "model__max_leaf_nodes" in g:
+            g["model__max_leaf_nodes"] = [2]
+        if "model__learning_rate" in g:
+            g["model__learning_rate"] = [0.01]
+        if "model__max_depth" in g:
+            g["model__max_depth"] = [1]
+        if "model__n_estimators" in g:
+            g["model__n_estimators"] = [1]
+        if "model__min_samples_leaf" in g:
+            # Larger than any split can honour -> the tree cannot branch, so even a
+            # depth-1 forest collapses to a near-constant predictor (a lone stump can
+            # otherwise clear the underfit floor on its own on easy regression sets).
+            g["model__min_samples_leaf"] = [10_000_000]
+        if "model__C" in g:
+            g["model__C"] = [1e-4]     # near-zero-capacity linear
+        if "model__alpha" in g:
+            g["model__alpha"] = [1e6]  # extreme shrinkage -> underfit
+    plan["ablation_handicap"] = (
+        "first-pass capacity capped to a near-stump (CREWML_ABLATION_HANDICAP=1); "
+        "ablation instrumentation, not a production setting"
+    )
+
+
 # --- Public: build the deterministic plan -----------------------------------
 
 def build_plan(
@@ -346,6 +396,7 @@ def build_plan(
     }
     plan["recommended_primary_model"] = plan["candidate_models"][0]["name"]
     plan["rationale"] = _rationale(profile, plan)
+    _apply_ablation_handicap(plan, iteration)  # no-op unless CREWML_ABLATION_HANDICAP=1
     _apply_critique(plan, critique)  # no-op on the first pass
     return plan
 

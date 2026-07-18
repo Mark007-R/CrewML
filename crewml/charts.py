@@ -157,3 +157,68 @@ def plot_crew_deltas(table: dict, path: Path = DELTAS_CHART_PATH) -> Path:
 def render_all(table: dict) -> list[Path]:
     """Render every Day-12 figure; returns the written paths."""
     return [plot_holdout_scores(table), plot_crew_deltas(table)]
+
+
+# --- Day 13: the Critic-loop ablation ---------------------------------------
+
+CRITIC_ABLATION_CHART_PATH = CHARTS_DIR / "day13_critic_ablation.png"
+
+LOOPED_COLOUR = "#d1495b"      # the full crew — the saturated colour, as everywhere
+NO_CRITIC_COLOUR = "#9aa5b4"   # the ablated variant — muted, a baseline
+
+
+def _ablation_panel(ax, study: dict, title: str) -> None:
+    """One panel: paired looped-vs-ablated holdout bars per dataset (absent = failed)."""
+    keys = list(study)
+    x = range(len(keys))
+    width = 0.38
+
+    looped_v = [study[k]["looped"]["value"] if study[k]["looped"].get("ok") else 0.0 for k in keys]
+    nc_v = [study[k]["no_critic"]["value"] if study[k]["no_critic"].get("ok") else 0.0 for k in keys]
+
+    b1 = ax.bar([i - width / 2 for i in x], looped_v, width, color=LOOPED_COLOUR, label="Looped (full crew)")
+    b2 = ax.bar([i + width / 2 for i in x], nc_v, width, color=NO_CRITIC_COLOUR, label="No-Critic (ablated)")
+    for bars in (b1, b2):
+        for bar in bars:
+            h = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width() / 2, h, f"{h:.3f}",
+                    ha="center", va="bottom", fontsize=6.5)
+
+    # Annotate the loop's contribution above each dataset where the loop actually fired.
+    for i, k in enumerate(keys):
+        drop = study[k]["loop_drop"]
+        if isinstance(drop, (int, float)) and drop > 1e-9:
+            ax.annotate(f"loop +{drop:.3f}", (i, max(looped_v[i], nc_v[i])),
+                        textcoords="offset points", xytext=(0, 14), ha="center",
+                        fontsize=7, fontweight="bold", color="#2a9d8f")
+
+    ax.set_xticks(list(x))
+    ax.set_xticklabels([f"{k}\n({study[k]['metric']})" for k in keys], fontsize=7.5)
+    ax.set_ylabel("held-out score (higher is better)", fontsize=8)
+    ax.set_title(title, fontsize=10, fontweight="bold")
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.margins(y=0.2)
+    ax.legend(fontsize=7.5, frameon=False, loc="lower right")
+
+
+def plot_critic_ablation(report: dict, path: Path = CRITIC_ABLATION_CHART_PATH) -> Path:
+    """Two panels — natural ablation (loop rarely fires) and the forced-deficiency probe
+    (loop recovers the crippled first pass). Rendered from committed numbers only.
+    """
+    natural = report.get("natural") or {}
+    probe = report.get("deficiency_probe") or {}
+    n_panels = 1 + (1 if probe else 0)
+    fig, axes = plt.subplots(1, n_panels, figsize=(1.9 * (len(natural) + len(probe)) + 3.5, 4.4))
+    if n_panels == 1:
+        axes = [axes]
+
+    _ablation_panel(axes[0], natural, "Natural — real datasets\n(Critic finalises pass 1; loop is free)")
+    if probe:
+        _ablation_panel(axes[1], probe, "Forced deficiency — crippled first pass\n(loop diagnoses underfit and recovers)")
+
+    fig.suptitle("CrewML — does the Critic loop earn its keep?", fontsize=12, fontweight="bold")
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path
