@@ -96,6 +96,7 @@ def run_variant(
     *,
     max_iterations: int = MAX_ITERATIONS,
     artifact_tag: str = "",
+    artifact_prefix: str = "day13",
 ) -> dict[str, Any]:
     """Run one crew variant on one dataset, then final-score it on the LOCKED holdout.
 
@@ -104,7 +105,8 @@ def run_variant(
     means the same thing a Day-12 crew number means — only the graph topology differs.
 
     ``artifact_tag`` namespaces the persisted final-state JSON so the looped and no-critic
-    runs on the same dataset don't clobber each other's artifacts.
+    runs on the same dataset don't clobber each other's artifacts; ``artifact_prefix``
+    names the study (Day 13 owns the default; the Day-14 agent ablation passes its own).
     """
     spec = REGISTRY[key]
 
@@ -122,6 +124,7 @@ def run_variant(
     scored = score_on_holdout(spec, final, positive_class=_positive_class(manifest, key))
 
     critiques = final.get("critiques") or []
+    tmetrics = (final.get("training") or {}).get("metrics") or {}
     record = {
         **scored,
         "variant": variant,
@@ -131,12 +134,17 @@ def run_variant(
         "loop_fired": bool((final.get("iteration") or 0) > 1),
         "final_decision": critiques[-1].get("decision") if critiques else None,
         "crew_seconds": round(crew_seconds, 2),
+        # Attribution facts (Day 14): which model won, how many engineered features
+        # rode along, and how many columns the plan screened out.
+        "best_model": tmetrics.get("best_model"),
+        "n_engineered": tmetrics.get("n_engineered"),
+        "n_dropped": len((final.get("plan") or {}).get("drop_columns") or []),
     }
 
     tag = f"_{artifact_tag}" if artifact_tag else ""
     out_dir = ARTIFACTS_DIR / "ablation" / key
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / f"day13_{variant}{tag}.json").write_text(json.dumps(final, indent=2, default=str))
+    (out_dir / f"{artifact_prefix}_{variant}{tag}.json").write_text(json.dumps(final, indent=2, default=str))
     return record
 
 

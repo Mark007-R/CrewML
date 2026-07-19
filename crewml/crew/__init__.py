@@ -7,10 +7,10 @@ as of Day 11 (Ensembler + Reporter) every node is a real specialist.
 """
 from crewml.crew.critic import build_critique, diagnose, run_critic
 from crewml.crew.ensembler import run_ensembler
-from crewml.crew.feature_engineer import run_feature_engineer
+from crewml.crew.feature_engineer import run_feature_engineer, run_identity_fe
 from crewml.crew.graph import CREW_NODES, VARIANTS, build_crew, build_graph
 from crewml.crew.nodes import route_after_critic
-from crewml.crew.planner import build_plan, run_planner
+from crewml.crew.planner import build_naive_plan, build_plan, run_planner
 from crewml.crew.profiler import build_profile, run_profiler
 from crewml.crew.reporter import build_report, render_model_card, run_reporter
 from crewml.crew.state import CrewState, initial_state
@@ -27,8 +27,10 @@ __all__ = [
     "build_profile",
     "run_profiler",
     "build_plan",
+    "build_naive_plan",
     "run_planner",
     "run_feature_engineer",
+    "run_identity_fe",
     "run_trainer",
     "diagnose",
     "build_critique",

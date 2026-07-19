@@ -29,7 +29,8 @@ SPEC = REGISTRY["credit-g"]
 # --- Variant topology -------------------------------------------------------
 
 def test_variants_declared():
-    assert VARIANTS == ("full", "no_critic")
+    # Day 13 shipped no_critic; Day 14 added the two per-agent removals.
+    assert VARIANTS == ("full", "no_critic", "no_planner", "no_feature_engineer")
 
 
 def test_no_critic_graph_drops_only_the_critic():

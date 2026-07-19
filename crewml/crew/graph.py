@@ -50,15 +50,30 @@ _NODE_FUNCS = {
 
 
 # The crew variants the graph builder knows how to assemble. ``full`` is the real
-# crew shipped in Phase 2; ``no_critic`` is the Day-13 ablation topology — the same
-# specialists in the same order, but with the Critic node and its feedback loop
-# removed, so the crew makes exactly one forward pass. Keeping both behind one
-# builder means the ablation runs the *identical* nodes as production and differs in
-# one structural way only (the loop), which is the whole point of an ablation.
-VARIANTS: tuple[str, ...] = ("full", "no_critic")
+# crew shipped in Phase 2; the rest are ablations, each removing exactly one
+# specialist so its contribution is measurable in isolation:
+#
+# * ``no_critic`` (Day 13) — a *structural* removal: the Critic node and its loop
+#   edge are dropped, so the crew makes one forward pass.
+# * ``no_planner`` / ``no_feature_engineer`` (Day 14) — *substitutional* removals:
+#   the graph cannot run without a plan / an ``add_features``, so the specialist is
+#   replaced by its naive floor (:func:`crewml.crew.nodes.naive_planner` — a
+#   profile-blind generic plan, critique-deaf; :func:`~crewml.crew.nodes.identity_feature_engineer`
+#   — the identity transform). Topology, node names and the Critic loop are all
+#   untouched; only the one node's body changes.
+#
+# Keeping every variant behind one builder means each ablation runs the *identical*
+# crew except for the one removal — which is the whole point of an ablation.
+VARIANTS: tuple[str, ...] = ("full", "no_critic", "no_planner", "no_feature_engineer")
 
-# The ablation's node set: everything except the Critic.
+# The Day-13 ablation's node set: everything except the Critic.
 _NO_CRITIC_NODES: tuple[str, ...] = tuple(n for n in CREW_NODES if n != "critic")
+
+# The Day-14 ablations' node-body swaps (same node name, naive-floor implementation).
+_NODE_OVERRIDES: dict[str, dict[str, object]] = {
+    "no_planner": {"planner": nodes.naive_planner},
+    "no_feature_engineer": {"feature_engineer": nodes.identity_feature_engineer},
+}
 
 
 def build_graph(variant: str = "full") -> StateGraph:
@@ -75,14 +90,19 @@ def build_graph(variant: str = "full") -> StateGraph:
         loop edge are dropped and the Trainer hands straight to the Ensembler, so
         the crew runs one forward pass. Nothing else about the topology changes, so
         any score difference between the two is attributable to the loop alone.
+        ``"no_planner"`` / ``"no_feature_engineer"`` — the Day-14 ablations: the
+        identical topology (Critic loop included), with that one specialist's node
+        body swapped for its naive floor (see ``_NODE_OVERRIDES``), so any score
+        difference is attributable to that specialist alone.
     """
     if variant not in VARIANTS:
         raise ValueError(f"unknown crew variant {variant!r}; choose from {VARIANTS}")
 
     g = StateGraph(CrewState)
-    node_names = CREW_NODES if variant == "full" else _NO_CRITIC_NODES
+    node_names = _NO_CRITIC_NODES if variant == "no_critic" else CREW_NODES
+    node_funcs = {**_NODE_FUNCS, **_NODE_OVERRIDES.get(variant, {})}
     for name in node_names:
-        g.add_node(name, _NODE_FUNCS[name])
+        g.add_node(name, node_funcs[name])
 
     # Linear front half (shared by both variants).
     g.add_edge(START, "profiler")
@@ -90,17 +110,19 @@ def build_graph(variant: str = "full") -> StateGraph:
     g.add_edge("planner", "feature_engineer")
     g.add_edge("feature_engineer", "trainer")
 
-    if variant == "full":
+    if variant == "no_critic":
+        # Day-13 ablation: no Critic, no loop — a single forward pass to the finalise tail.
+        g.add_edge("trainer", "ensembler")
+    else:
         g.add_edge("trainer", "critic")
         # The one conditional edge: loop back to Planner, or move on to finalise.
+        # (In the no_planner variant "planner" is the naive stand-in — the loop
+        # edge survives, but re-entry rebuilds the identical plan by design.)
         g.add_conditional_edges(
             "critic",
             nodes.route_after_critic,
             {"iterate": "planner", "finalize": "ensembler"},
         )
-    else:
-        # Ablation: no Critic, no loop — a single forward pass to the finalise tail.
-        g.add_edge("trainer", "ensembler")
 
     # Finalise tail (shared by both variants).
     g.add_edge("ensembler", "reporter")

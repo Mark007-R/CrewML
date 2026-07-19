@@ -222,3 +222,74 @@ def plot_critic_ablation(report: dict, path: Path = CRITIC_ABLATION_CHART_PATH) 
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return path
+
+
+# --- Day 14: per-agent ablations (Planner / Feature Engineer) ----------------
+
+AGENT_ABLATION_CHART_PATH = CHARTS_DIR / "day14_agent_ablation.png"
+
+NO_PLANNER_COLOUR = "#9aa5b4"   # naive-floor arms — muted, like every ablated baseline
+NO_FE_COLOUR = "#c8b8a2"
+
+
+def plot_agent_ablation(report: dict, path: Path = AGENT_ABLATION_CHART_PATH) -> Path:
+    """One panel: per dataset, the full crew vs. its two single-agent removals.
+
+    Bars are held-out scores (absent = that arm failed to ship); the annotation above
+    each dataset names the larger of the two agent drops, sign included — a negative
+    number (naive floor won) is drawn as prominently as a positive one.
+    """
+    study = report.get("results") or {}
+    keys = list(study)
+    x = range(len(keys))
+    width = 0.26
+
+    def _val(k, arm):
+        rec = study[k]["arms"][arm]
+        return rec["value"] if rec.get("ok") else 0.0
+
+    fig, ax = plt.subplots(figsize=(1.9 * len(keys) + 3.5, 4.6))
+    bars = [
+        ax.bar([i - width for i in x], [_val(k, "full") for k in keys], width,
+               color=LOOPED_COLOUR, label="Full crew"),
+        ax.bar(list(x), [_val(k, "no_planner") for k in keys], width,
+               color=NO_PLANNER_COLOUR, label="No Planner (naive plan)"),
+        ax.bar([i + width for i in x], [_val(k, "no_feature_engineer") for k in keys], width,
+               color=NO_FE_COLOUR, label="No Feature Engineer (raw features)"),
+    ]
+    for group in bars:
+        for bar in group:
+            h = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width() / 2, h, f"{h:.3f}",
+                    ha="center", va="bottom", fontsize=6)
+
+    for i, k in enumerate(keys):
+        drops = study[k]["drops"]
+        named = [(a, d) for a, d in drops.items() if isinstance(d, (int, float))]
+        if not named:
+            continue
+        agent, drop = max(named, key=lambda t: abs(t[1]))
+        if abs(drop) <= 1e-9:
+            continue
+        colour = "#2a9d8f" if drop > 0 else "#b3423a"
+        label = {"planner": "planner", "feature_engineer": "FE"}[agent]
+        top = max(_val(k, arm) for arm in ("full", "no_planner", "no_feature_engineer"))
+        ax.annotate(f"{label} {drop:+.3f}", (i, top),
+                    textcoords="offset points", xytext=(0, 14), ha="center",
+                    fontsize=7, fontweight="bold", color=colour)
+
+    ax.set_xticks(list(x))
+    ax.set_xticklabels([f"{k}\n({study[k]['metric']})" for k in keys], fontsize=7.5)
+    ax.set_ylabel("held-out score (higher is better)", fontsize=8)
+    ax.set_title("CrewML — what do the Planner and the Feature Engineer earn?\n"
+                 "(each arm removes exactly one specialist; drop = full − ablated)",
+                 fontsize=10, fontweight="bold")
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.margins(y=0.22)
+    ax.legend(fontsize=7.5, frameon=False, loc="lower right")
+
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path
