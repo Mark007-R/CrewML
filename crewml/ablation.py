@@ -71,6 +71,31 @@ def _positive_class(manifest: dict, key: str) -> Optional[str]:
     return (manifest["datasets"][key].get("target") or {}).get("positive_class")
 
 
+def extract_run_facts(final: dict[str, Any]) -> dict[str, Any]:
+    """Distil per-run cost + loop-outcome facts from a crew's terminal state (pure).
+
+    Added for the Day-15 iteration-depth study, which prices the loop: the token totals
+    come from the Reporter's ``llm_usage`` aggregation (live narratives only — mock/
+    unavailable ones contribute nothing), and ``budget_bound`` records whether the final
+    Critic pass *wanted* another iteration but was stopped by ``max_iterations`` (its
+    rule-3 "budget reached" finalise, which fires only when actionable findings remain).
+    That flag is what separates "the crew was done" from "the crew was cut off" — the
+    two look identical in the score column at saturation, and nowhere else.
+    """
+    llm_usage = ((final.get("report") or {}).get("llm_usage")) or {}
+    critiques = final.get("critiques") or []
+    last = critiques[-1] if critiques else {}
+    reason = last.get("reason") or ""
+    return {
+        "llm_prompt_tokens": llm_usage.get("prompt_tokens"),
+        "llm_completion_tokens": llm_usage.get("completion_tokens"),
+        "llm_narratives_live": llm_usage.get("n_live"),
+        "final_reason": last.get("reason"),
+        "final_finding_codes": last.get("finding_codes") or [],
+        "budget_bound": bool(last.get("decision") == "finalize" and "budget reached" in reason),
+    }
+
+
 @contextmanager
 def _handicap(enabled: bool):
     """Temporarily set the first-pass handicap env flag, restoring it afterward.
@@ -127,6 +152,9 @@ def run_variant(
     tmetrics = (final.get("training") or {}).get("metrics") or {}
     record = {
         **scored,
+        # Cost + loop-outcome facts (Day 15): token totals and whether the last Critic
+        # pass was cut off by the budget rather than satisfied.
+        **extract_run_facts(final),
         "variant": variant,
         "mock": is_mock_mode(),
         "iterations_run": final.get("iteration"),

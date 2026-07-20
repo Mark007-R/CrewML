@@ -293,3 +293,95 @@ def plot_agent_ablation(report: dict, path: Path = AGENT_ABLATION_CHART_PATH) ->
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return path
+
+
+# --- Day 15: iteration-depth study (score vs Critic-loop budget) -------------
+
+ITERATION_DEPTH_CHART_PATH = CHARTS_DIR / "day15_iteration_depth.png"
+
+# One line per probe dataset; the crew red stays the "subject" colour.
+DEPTH_CURVE_COLOURS = ["#d1495b", "#41618c", "#2a9d8f", "#c8842a"]
+
+
+def plot_iteration_depth(report: dict, path: Path = ITERATION_DEPTH_CHART_PATH) -> Path:
+    """Two panels from the committed Day-15 numbers.
+
+    Left — the deficiency-sweep depth-response: held-out score vs iteration budget, one
+    line per probe dataset, budget-bound points ringed (the crew was cut off there, not
+    done) and each point annotated with the passes actually used. The natural-arm score
+    for the same dataset is drawn as a dashed reference — the ceiling a healthy first
+    pass reaches without needing the loop at all.
+
+    Right — the price of each budget step: marginal held-out lift per added unit of
+    budget. A failed/absent point is left out, never drawn at zero.
+    """
+    probe = report.get("analysis", {}).get("deficiency_probe") or {}
+    natural = report.get("analysis", {}).get("natural") or {}
+
+    fig, (ax_curve, ax_marg) = plt.subplots(1, 2, figsize=(11.5, 4.6))
+
+    for i, (key, rows) in enumerate(probe.items()):
+        colour = DEPTH_CURVE_COLOURS[i % len(DEPTH_CURVE_COLOURS)]
+        pts = [(r["depth"], r["value"], r) for r in rows if r["value"] is not None]
+        if not pts:
+            continue
+        xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+        ax_curve.plot(xs, ys, marker="o", color=colour, label=key, linewidth=2, zorder=3)
+        for x, y, r in pts:
+            if r.get("budget_bound"):
+                ax_curve.scatter([x], [y], s=170, facecolors="none",
+                                 edgecolors=colour, linewidths=1.6, zorder=4)
+            ax_curve.annotate(f"{r['passes']}p", (x, y), textcoords="offset points",
+                              xytext=(0, -14), ha="center", fontsize=6.5, color=colour)
+        nat_rows = natural.get(key) or []
+        nat_vals = [r["value"] for r in nat_rows if r["value"] is not None]
+        if nat_vals:
+            ax_curve.axhline(nat_vals[-1], color=colour, linestyle="--",
+                             linewidth=1, alpha=0.55, zorder=2)
+
+    ax_curve.set_xlabel("iteration budget (max Critic passes)", fontsize=8)
+    ax_curve.set_ylabel("held-out score", fontsize=8)
+    ax_curve.set_title("Deficiency sweep — score vs budget\n(ringed = budget-bound: cut off, not done;\n"
+                       "dashed = natural-run ceiling; 'Np' = passes used)",
+                       fontsize=9, fontweight="bold")
+    depths = sorted({r["depth"] for rows in probe.values() for r in rows})
+    if depths:
+        ax_curve.set_xticks(depths)
+    ax_curve.spines[["top", "right"]].set_visible(False)
+    ax_curve.legend(fontsize=7.5, frameon=False, loc="lower right")
+
+    # Right panel: marginal lift per budget step, grouped by dataset.
+    steps = [d for d in depths[1:]]
+    width = 0.8 / max(len(probe), 1)
+    for i, (key, rows) in enumerate(probe.items()):
+        colour = DEPTH_CURVE_COLOURS[i % len(DEPTH_CURVE_COLOURS)]
+        by_depth = {r["depth"]: r for r in rows}
+        xs, ys = [], []
+        for j, d in enumerate(steps):
+            m = (by_depth.get(d) or {}).get("marginal_lift")
+            if isinstance(m, (int, float)):
+                xs.append(j + i * width)
+                ys.append(m)
+        bars = ax_marg.bar(xs, ys, width * 0.92, color=colour, label=key)
+        for bar in bars:
+            h = bar.get_height()
+            ax_marg.text(bar.get_x() + bar.get_width() / 2, h, f"{h:+.3f}",
+                         ha="center", va="bottom" if h >= 0 else "top", fontsize=6.5)
+
+    ax_marg.axhline(0, color="#444444", linewidth=0.8)
+    ax_marg.set_xticks([j + width * (len(probe) - 1) / 2 for j in range(len(steps))])
+    ax_marg.set_xticklabels([f"{d - 1}→{d}" for d in steps], fontsize=8)
+    ax_marg.set_xlabel("budget step", fontsize=8)
+    ax_marg.set_ylabel("marginal held-out lift", fontsize=8)
+    ax_marg.set_title("The price of each extra loop\n(first allowed loop buys the cliff; the rest buy ~0)",
+                      fontsize=9, fontweight="bold")
+    ax_marg.spines[["top", "right"]].set_visible(False)
+    ax_marg.margins(y=0.25)
+    ax_marg.legend(fontsize=7.5, frameon=False)
+
+    fig.suptitle("CrewML — how deep should the Critic loop go?", fontsize=12, fontweight="bold")
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path
