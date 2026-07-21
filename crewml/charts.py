@@ -385,3 +385,98 @@ def plot_iteration_depth(report: dict, path: Path = ITERATION_DEPTH_CHART_PATH) 
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return path
+
+
+# --- Day 16: provider study (Groq vs Claude vs mock) --------------------------
+
+PROVIDER_STUDY_CHART_PATH = CHARTS_DIR / "day16_provider_study.png"
+
+PROBE_STATUS_COLOURS = {
+    "ok": "#2a9d8f",
+    "offline": "#41618c",
+    "not_configured": "#c8842a",
+    "error": "#d1495b",
+}
+ARM_COLOURS = {"groq": "#c8842a", "anthropic": "#41618c", "mock": "#d1495b"}
+
+
+def plot_provider_study(report: dict, path: Path = PROVIDER_STUDY_CHART_PATH) -> Path:
+    """Two panels from the committed Day-16 numbers.
+
+    Left — provider availability: one bar per probed provider, colour = probe status.
+    Unavailable providers are drawn *as unavailable* rather than omitted: the outage is
+    the finding this session, so the chart must show it.
+
+    Right — holdout score per dataset for each arm that actually ran, side by side with
+    the Day-14 archival failing-provider baseline. Identical bars are the resilience
+    result made visible. Absent = that arm failed to ship; never drawn at zero.
+    """
+    probes = report.get("probes") or {}
+    arms = report.get("arms") or {}
+    res_rows = (report.get("resilience") or {}).get("rows") or []
+
+    fig, (ax_probe, ax_scores) = plt.subplots(
+        1, 2, figsize=(12.0, 4.6), gridspec_kw={"width_ratios": [1, 2.2]}
+    )
+
+    names = list(probes)
+    colours = [PROBE_STATUS_COLOURS.get(probes[n]["status"], "#9aa5b4") for n in names]
+    # Availability is categorical — the bar height (1) carries nothing; colour + the
+    # status label on the bar carry everything.
+    bars = ax_probe.bar(range(len(names)), [1] * len(names), color=colours)
+    for bar, n in zip(bars, names):
+        p = probes[n]
+        label = {"ok": "OK", "offline": "always\navailable", "not_configured": "no key",
+                 "error": "restricted /\nunavailable"}.get(p["status"], p["status"])
+        ax_probe.text(bar.get_x() + bar.get_width() / 2, 0.5, label, ha="center",
+                      va="center", fontsize=8, fontweight="bold", color="white")
+        if p.get("latency_s") is not None:
+            ax_probe.text(bar.get_x() + bar.get_width() / 2, 1.02,
+                          f"{p['latency_s']:.2f}s", ha="center", va="bottom", fontsize=7)
+    ax_probe.set_xticks(range(len(names)))
+    ax_probe.set_xticklabels(names, fontsize=8)
+    ax_probe.set_yticks([])
+    ax_probe.set_title("Provider availability\n(live probes, committed evidence)",
+                       fontsize=9, fontweight="bold")
+    ax_probe.spines[["top", "right", "left"]].set_visible(False)
+    ax_probe.margins(y=0.15)
+
+    # Right panel: per-dataset holdout bars — each run arm plus the archival baseline.
+    series: list[tuple[str, dict[str, float], str, dict]] = []
+    for provider, arm in arms.items():
+        vals = {k: r["value"] for k, r in arm.items() if r.get("ok")}
+        series.append((f"{provider} (fresh)", vals, ARM_COLOURS.get(provider, "#9aa5b4"), {}))
+    arch_vals = {
+        r["dataset"]: r["archival_failing_provider_value"]
+        for r in res_rows if r["archival_failing_provider_value"] is not None
+    }
+    if arch_vals:
+        series.append(("day-14 archival (provider failing)", arch_vals, "#9aa5b4", {"hatch": "//"}))
+
+    keys = sorted({k for _, vals, _, _ in series for k in vals})
+    width = 0.8 / max(len(series), 1)
+    for i, (label, vals, colour, extra) in enumerate(series):
+        xs = [j + i * width - 0.4 + width / 2 for j, k in enumerate(keys) if k in vals]
+        ys = [vals[k] for k in keys if k in vals]
+        bars = ax_scores.bar(xs, ys, width * 0.92, color=colour, label=label,
+                             edgecolor="white", linewidth=0.5, **extra)
+        for bar, y in zip(bars, ys):
+            ax_scores.text(bar.get_x() + bar.get_width() / 2, y, f"{y:.3f}",
+                           ha="center", va="bottom", fontsize=6)
+    ax_scores.set_xticks(range(len(keys)))
+    ax_scores.set_xticklabels(keys, fontsize=8)
+    ax_scores.set_ylabel("held-out score (higher is better)", fontsize=8)
+    ax_scores.set_title("Holdout quality by arm — identical bars = provider-independent core\n"
+                        "(no live-provider arm ran this session; mock is never a headline)",
+                        fontsize=9, fontweight="bold")
+    ax_scores.spines[["top", "right"]].set_visible(False)
+    ax_scores.margins(y=0.2)
+    ax_scores.legend(fontsize=7, frameon=False, loc="lower right")
+
+    fig.suptitle("CrewML — provider study: availability, quality, resilience",
+                 fontsize=12, fontweight="bold")
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path
