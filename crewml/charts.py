@@ -480,3 +480,78 @@ def plot_provider_study(report: dict, path: Path = PROVIDER_STUDY_CHART_PATH) ->
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return path
+
+
+# --- Day 17: failure taxonomy ------------------------------------------------
+
+FAILURE_TAXONOMY_CHART_PATH = CHARTS_DIR / "day17_failure_taxonomy.png"
+
+# Outcome severity is the story of the taxonomy chart, so colour carries outcome:
+# red = fatal (no model), amber = degraded (shipped, knowably worse), green = handled
+# (a guard absorbed it), slate = detected (impact indeterminate), purple = missed
+# (ground-truth fault, no surface fired — only ever assignable by a probe).
+OUTCOME_COLOURS = {
+    "fatal": "#d1495b",
+    "degraded": "#e8a23d",
+    "handled": "#2a9d8f",
+    "detected": "#6b7a8f",
+    "missed": "#7b4b94",
+}
+
+
+def plot_failure_taxonomy(report: dict, path: Path = FAILURE_TAXONOMY_CHART_PATH) -> Path:
+    """Two panels: the archive census by category (stacked by outcome), and the
+    fatal-count-by-system headline. Probe-sourced ``missed`` events are merged into
+    the left panel so the one gap the probes found is visible next to the census."""
+    census = report["archive_census"]["summary"]
+    probe_summary = report["probes"]["summary"]
+
+    # Merge census + probe categories (probes contribute e.g. leakage_missed).
+    merged: dict[str, dict] = {}
+    for src in (census["by_category"], probe_summary["by_category"]):
+        for code, c in src.items():
+            slot = merged.setdefault(code, {"by_outcome": {}})
+            for outcome, n in c["by_outcome"].items():
+                slot["by_outcome"][outcome] = slot["by_outcome"].get(outcome, 0) + n
+    codes = sorted(merged, key=lambda k: -sum(merged[k]["by_outcome"].values()))
+
+    fig, (ax_census, ax_fatal) = plt.subplots(
+        1, 2, figsize=(11.5, 0.42 * max(len(codes), 6) + 2.6),
+        gridspec_kw={"width_ratios": [3, 1]},
+    )
+
+    outcomes = [o for o in OUTCOME_COLOURS if any(merged[c]["by_outcome"].get(o) for c in codes)]
+    left = [0.0] * len(codes)
+    for outcome in outcomes:
+        widths = [merged[c]["by_outcome"].get(outcome, 0) for c in codes]
+        ax_census.barh(range(len(codes)), widths, left=left,
+                       color=OUTCOME_COLOURS[outcome], label=outcome, height=0.62)
+        left = [l + w for l, w in zip(left, widths)]
+    for i, total in enumerate(left):
+        ax_census.text(total + 0.15, i, str(int(total)), va="center", fontsize=7)
+    ax_census.set_yticks(range(len(codes)))
+    ax_census.set_yticklabels(codes, fontsize=8, family="monospace")
+    ax_census.invert_yaxis()
+    ax_census.set_xlabel("events (archive census + probes)", fontsize=8)
+    ax_census.set_title("Failure events by category and outcome", fontsize=10, fontweight="bold")
+    ax_census.spines[["top", "right"]].set_visible(False)
+    ax_census.legend(fontsize=7, frameon=False, loc="lower right")
+
+    fatal = census["fatal_by_system"]
+    systems = ["crew", "solo"]
+    values = [fatal.get(s, 0) for s in systems]
+    bars = ax_fatal.bar(systems, values, color=[SYSTEM_COLOURS["crew"], SYSTEM_COLOURS["solo_agent"]])
+    for bar, v in zip(bars, values):
+        ax_fatal.text(bar.get_x() + bar.get_width() / 2, v, str(v),
+                      ha="center", va="bottom", fontsize=10, fontweight="bold")
+    ax_fatal.set_title("Fatal failures\n(no scored model)", fontsize=10, fontweight="bold")
+    ax_fatal.set_ylim(0, max(values + [1]) * 1.3)
+    ax_fatal.spines[["top", "right"]].set_visible(False)
+
+    fig.suptitle("CrewML — Day 17 failure taxonomy: what fails, who catches it, what it costs",
+                 fontsize=12, fontweight="bold")
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path

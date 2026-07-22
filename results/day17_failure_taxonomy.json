@@ -1,0 +1,1293 @@
+{
+  "schema_version": 1,
+  "day": 17,
+  "phase": 3,
+  "study": "failure_taxonomy",
+  "mock": false,
+  "taxonomy": {
+    "exec_error": {
+      "group": "exec_error",
+      "stage": "executor/trainer",
+      "surface": "sandbox exit status -> Critic `execution_error` blocker",
+      "description": "Generated or assembled code crashed in the sandbox (non-zero exit)."
+    },
+    "exec_timeout": {
+      "group": "exec_error",
+      "stage": "executor",
+      "surface": "sandbox wall-clock cap -> `timed_out` -> Critic blocker",
+      "description": "Code exceeded the executor's wall-clock cap and was killed."
+    },
+    "plan_underfit": {
+      "group": "bad_plan",
+      "stage": "planner",
+      "surface": "Critic underfit floor (per-metric absolute score)",
+      "description": "The plan's capacity was insufficient \u2014 winner scored at/below the underfit floor."
+    },
+    "plan_overfit_variance": {
+      "group": "bad_plan",
+      "stage": "planner",
+      "surface": "Critic fold-variance threshold (cv_std/|cv_mean|)",
+      "description": "High fold-to-fold variance \u2014 an overfitting/instability risk in the plan's grids."
+    },
+    "plan_search_invalid": {
+      "group": "bad_plan",
+      "stage": "planner",
+      "surface": "sklearn parameter validation at fit time",
+      "description": "A hyper-parameter grid named parameters the estimator does not have."
+    },
+    "wrong_metric": {
+      "group": "wrong_metric",
+      "stage": "planner",
+      "surface": "Critic scorer-vs-primary-metric guard",
+      "description": "The CV scorer does not match the metric the run is graded on."
+    },
+    "leakage_flagged": {
+      "group": "missed_leakage",
+      "stage": "profiler/planner",
+      "surface": "Profiler leakage screen + Critic residual/ceiling checks",
+      "description": "A leakage signal fired (flagged column or implausibly high score)."
+    },
+    "leakage_missed": {
+      "group": "missed_leakage",
+      "stage": "profiler/planner/critic",
+      "surface": "NONE fired (ground truth from an injection probe)",
+      "description": "A leaked feature was present and no detection surface caught it."
+    },
+    "imbalance_unhandled": {
+      "group": "bad_plan",
+      "stage": "planner",
+      "surface": "Critic imbalance check (flag present, strategy absent/ineffective)",
+      "description": "Class imbalance was flagged but the winning model never received balancing."
+    },
+    "provider_outage": {
+      "group": "provider",
+      "stage": "llm",
+      "surface": "per-call fallback (`unavailable` narrative / FE deterministic fallback)",
+      "description": "The LLM provider failed; deterministic fallbacks carried the run."
+    },
+    "budget_cutoff": {
+      "group": "budget",
+      "stage": "critic/router",
+      "surface": "Critic budget-reached finalise with actionable findings remaining",
+      "description": "The iteration budget stopped the loop while it still had repairs to make."
+    },
+    "loop_no_actuator": {
+      "group": "budget",
+      "stage": "critic",
+      "surface": "cross-pass score delta (loop fired, nothing moved)",
+      "description": "The loop iterated but recovered nothing \u2014 no actuator for its directives."
+    },
+    "ensemble_regression": {
+      "group": "ensemble",
+      "stage": "ensembler",
+      "surface": "Ensembler same-fold CV comparison + chooser",
+      "description": "The ensemble scored below the single best model."
+    }
+  },
+  "outcomes": [
+    "fatal",
+    "degraded",
+    "handled",
+    "detected",
+    "missed"
+  ],
+  "archive_census": {
+    "n_crew_runs": 43,
+    "n_solo_runs": 5,
+    "summary": {
+      "n_events": 87,
+      "by_category": {
+        "ensemble_regression": {
+          "group": "ensemble",
+          "stage": "ensembler",
+          "total": 36,
+          "by_outcome": {
+            "handled": 36
+          },
+          "by_system": {
+            "crew": 36
+          }
+        },
+        "provider_outage": {
+          "group": "provider",
+          "stage": "llm",
+          "total": 33,
+          "by_outcome": {
+            "handled": 33
+          },
+          "by_system": {
+            "crew": 33
+          }
+        },
+        "plan_underfit": {
+          "group": "bad_plan",
+          "stage": "planner",
+          "total": 9,
+          "by_outcome": {
+            "degraded": 3,
+            "handled": 6
+          },
+          "by_system": {
+            "crew": 9
+          }
+        },
+        "budget_cutoff": {
+          "group": "budget",
+          "stage": "critic/router",
+          "total": 3,
+          "by_outcome": {
+            "degraded": 3
+          },
+          "by_system": {
+            "crew": 3
+          }
+        },
+        "imbalance_unhandled": {
+          "group": "bad_plan",
+          "stage": "planner",
+          "total": 2,
+          "by_outcome": {
+            "detected": 2
+          },
+          "by_system": {
+            "crew": 2
+          }
+        },
+        "loop_no_actuator": {
+          "group": "budget",
+          "stage": "critic",
+          "total": 2,
+          "by_outcome": {
+            "detected": 2
+          },
+          "by_system": {
+            "crew": 2
+          }
+        },
+        "plan_search_invalid": {
+          "group": "bad_plan",
+          "stage": "planner",
+          "total": 1,
+          "by_outcome": {
+            "fatal": 1
+          },
+          "by_system": {
+            "solo": 1
+          }
+        },
+        "exec_timeout": {
+          "group": "exec_error",
+          "stage": "executor",
+          "total": 1,
+          "by_outcome": {
+            "fatal": 1
+          },
+          "by_system": {
+            "solo": 1
+          }
+        }
+      },
+      "by_outcome": {
+        "fatal": 2,
+        "degraded": 6,
+        "handled": 75,
+        "detected": 4,
+        "missed": 0
+      },
+      "fatal_by_system": {
+        "solo": 2
+      }
+    },
+    "events": [
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day14_full",
+        "system": "crew",
+        "evidence": "4 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day14_full",
+        "system": "crew",
+        "evidence": "ensemble CV 0.948552 vs single 0.977949 (-0.029397); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day14_no_feature_engineer",
+        "system": "crew",
+        "evidence": "3 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day14_no_feature_engineer",
+        "system": "crew",
+        "evidence": "ensemble CV 0.94859 vs single 0.977949 (-0.029359); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day14_no_planner",
+        "system": "crew",
+        "evidence": "4 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day15_full_handicap_d1",
+        "system": "crew",
+        "evidence": "4 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "plan_underfit",
+        "group": "bad_plan",
+        "stage": "planner",
+        "outcome": "degraded",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day15_full_handicap_d1",
+        "system": "crew",
+        "evidence": "CV r2=0.0149 is at/below the underfit floor (0.1) \u2014 the candidates are barely beating chance. [still present when the budget cut the loop off]"
+      },
+      {
+        "category": "budget_cutoff",
+        "group": "budget",
+        "stage": "critic/router",
+        "outcome": "degraded",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day15_full_handicap_d1",
+        "system": "crew",
+        "evidence": "iteration budget reached (1/1) \u2014 finalising; findings remaining: [underfit]"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day15_full_handicap_d1",
+        "system": "crew",
+        "evidence": "ensemble CV 0.009105 vs single 0.014877 (-0.005772); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day15_full_handicap_d2",
+        "system": "crew",
+        "evidence": "5 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "plan_underfit",
+        "group": "bad_plan",
+        "stage": "planner",
+        "outcome": "handled",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day15_full_handicap_d2",
+        "system": "crew",
+        "evidence": "CV r2=0.0149 is at/below the underfit floor (0.1) \u2014 the candidates are barely beating chance. [recovered by a later pass]"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day15_full_handicap_d2",
+        "system": "crew",
+        "evidence": "ensemble CV 0.948332 vs single 0.977123 (-0.028790); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day15_full_handicap_d3",
+        "system": "crew",
+        "evidence": "5 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "plan_underfit",
+        "group": "bad_plan",
+        "stage": "planner",
+        "outcome": "handled",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day15_full_handicap_d3",
+        "system": "crew",
+        "evidence": "CV r2=0.0149 is at/below the underfit floor (0.1) \u2014 the candidates are barely beating chance. [recovered by a later pass]"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day15_full_handicap_d3",
+        "system": "crew",
+        "evidence": "ensemble CV 0.948332 vs single 0.977123 (-0.028790); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day15_full_handicap_d4",
+        "system": "crew",
+        "evidence": "5 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "plan_underfit",
+        "group": "bad_plan",
+        "stage": "planner",
+        "outcome": "handled",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day15_full_handicap_d4",
+        "system": "crew",
+        "evidence": "CV r2=0.0149 is at/below the underfit floor (0.1) \u2014 the candidates are barely beating chance. [recovered by a later pass]"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day15_full_handicap_d4",
+        "system": "crew",
+        "evidence": "ensemble CV 0.948332 vs single 0.977123 (-0.028790); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day15_full_natural_d1",
+        "system": "crew",
+        "evidence": "4 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day15_full_natural_d1",
+        "system": "crew",
+        "evidence": "ensemble CV 0.948552 vs single 0.977949 (-0.029397); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day15_full_natural_d3",
+        "system": "crew",
+        "evidence": "4 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day15_full_natural_d3",
+        "system": "crew",
+        "evidence": "ensemble CV 0.948561 vs single 0.977949 (-0.029388); chooser kept single"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day16_full_mock",
+        "system": "crew",
+        "evidence": "ensemble CV 0.948561 vs single 0.977949 (-0.029388); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "credit-g",
+        "run": "credit-g/day14_full",
+        "system": "crew",
+        "evidence": "4 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "credit-g",
+        "run": "credit-g/day14_full",
+        "system": "crew",
+        "evidence": "ensemble CV 0.795536 vs single 0.799405 (-0.003869); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "credit-g",
+        "run": "credit-g/day14_no_feature_engineer",
+        "system": "crew",
+        "evidence": "3 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "credit-g",
+        "run": "credit-g/day14_no_planner",
+        "system": "crew",
+        "evidence": "5 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "imbalance_unhandled",
+        "group": "bad_plan",
+        "stage": "planner",
+        "outcome": "detected",
+        "dataset": "credit-g",
+        "run": "credit-g/day14_no_planner",
+        "system": "crew",
+        "evidence": "Class imbalance is present and the plan did not enable class weighting. [present on the final pass]"
+      },
+      {
+        "category": "loop_no_actuator",
+        "group": "budget",
+        "stage": "critic",
+        "outcome": "detected",
+        "dataset": "credit-g",
+        "run": "credit-g/day14_no_planner",
+        "system": "crew",
+        "evidence": "loop ran 2 passes, CV moved +0.000000 (< 0.002) with findings still open"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "credit-g",
+        "run": "credit-g/day15_full_natural_d1",
+        "system": "crew",
+        "evidence": "4 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "credit-g",
+        "run": "credit-g/day15_full_natural_d1",
+        "system": "crew",
+        "evidence": "ensemble CV 0.795536 vs single 0.799405 (-0.003869); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "credit-g",
+        "run": "credit-g/day15_full_natural_d3",
+        "system": "crew",
+        "evidence": "4 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "credit-g",
+        "run": "credit-g/day15_full_natural_d3",
+        "system": "crew",
+        "evidence": "ensemble CV 0.795536 vs single 0.799405 (-0.003869); chooser kept single"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "credit-g",
+        "run": "credit-g/day16_full_mock",
+        "system": "crew",
+        "evidence": "ensemble CV 0.795536 vs single 0.799405 (-0.003869); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "diabetes",
+        "run": "diabetes/day14_full",
+        "system": "crew",
+        "evidence": "4 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "diabetes",
+        "run": "diabetes/day14_full",
+        "system": "crew",
+        "evidence": "ensemble CV 0.822975 vs single 0.83718 (-0.014205); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "diabetes",
+        "run": "diabetes/day14_no_feature_engineer",
+        "system": "crew",
+        "evidence": "3 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "diabetes",
+        "run": "diabetes/day14_no_feature_engineer",
+        "system": "crew",
+        "evidence": "ensemble CV 0.822211 vs single 0.83718 (-0.014970); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "diabetes",
+        "run": "diabetes/day14_no_planner",
+        "system": "crew",
+        "evidence": "5 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "imbalance_unhandled",
+        "group": "bad_plan",
+        "stage": "planner",
+        "outcome": "detected",
+        "dataset": "diabetes",
+        "run": "diabetes/day14_no_planner",
+        "system": "crew",
+        "evidence": "Class imbalance is present and the plan did not enable class weighting. [present on the final pass]"
+      },
+      {
+        "category": "loop_no_actuator",
+        "group": "budget",
+        "stage": "critic",
+        "outcome": "detected",
+        "dataset": "diabetes",
+        "run": "diabetes/day14_no_planner",
+        "system": "crew",
+        "evidence": "loop ran 2 passes, CV moved +0.000000 (< 0.002) with findings still open"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "diabetes",
+        "run": "diabetes/day15_full_natural_d1",
+        "system": "crew",
+        "evidence": "4 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "diabetes",
+        "run": "diabetes/day15_full_natural_d1",
+        "system": "crew",
+        "evidence": "ensemble CV 0.822975 vs single 0.83718 (-0.014205); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "diabetes",
+        "run": "diabetes/day15_full_natural_d3",
+        "system": "crew",
+        "evidence": "4 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "diabetes",
+        "run": "diabetes/day15_full_natural_d3",
+        "system": "crew",
+        "evidence": "ensemble CV 0.822975 vs single 0.83718 (-0.014205); chooser kept single"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "diabetes",
+        "run": "diabetes/day16_full_mock",
+        "system": "crew",
+        "evidence": "ensemble CV 0.824038 vs single 0.83718 (-0.013142); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day14_full",
+        "system": "crew",
+        "evidence": "4 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day14_full",
+        "system": "crew",
+        "evidence": "ensemble CV 0.713769 vs single 0.821448 (-0.107678); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day14_no_feature_engineer",
+        "system": "crew",
+        "evidence": "3 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day14_no_feature_engineer",
+        "system": "crew",
+        "evidence": "ensemble CV 0.713761 vs single 0.821448 (-0.107687); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day14_no_planner",
+        "system": "crew",
+        "evidence": "4 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day15_full_handicap_d1",
+        "system": "crew",
+        "evidence": "4 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "plan_underfit",
+        "group": "bad_plan",
+        "stage": "planner",
+        "outcome": "degraded",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day15_full_handicap_d1",
+        "system": "crew",
+        "evidence": "CV r2=0.0022 is at/below the underfit floor (0.1) \u2014 the candidates are barely beating chance. [still present when the budget cut the loop off]"
+      },
+      {
+        "category": "budget_cutoff",
+        "group": "budget",
+        "stage": "critic/router",
+        "outcome": "degraded",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day15_full_handicap_d1",
+        "system": "crew",
+        "evidence": "iteration budget reached (1/1) \u2014 finalising; findings remaining: [underfit]"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day15_full_handicap_d1",
+        "system": "crew",
+        "evidence": "ensemble CV 0.000655 vs single 0.002198 (-0.001542); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day15_full_handicap_d2",
+        "system": "crew",
+        "evidence": "5 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "plan_underfit",
+        "group": "bad_plan",
+        "stage": "planner",
+        "outcome": "handled",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day15_full_handicap_d2",
+        "system": "crew",
+        "evidence": "CV r2=0.0022 is at/below the underfit floor (0.1) \u2014 the candidates are barely beating chance. [recovered by a later pass]"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day15_full_handicap_d2",
+        "system": "crew",
+        "evidence": "ensemble CV 0.710662 vs single 0.824724 (-0.114062); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day15_full_handicap_d3",
+        "system": "crew",
+        "evidence": "5 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "plan_underfit",
+        "group": "bad_plan",
+        "stage": "planner",
+        "outcome": "handled",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day15_full_handicap_d3",
+        "system": "crew",
+        "evidence": "CV r2=0.0022 is at/below the underfit floor (0.1) \u2014 the candidates are barely beating chance. [recovered by a later pass]"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day15_full_handicap_d3",
+        "system": "crew",
+        "evidence": "ensemble CV 0.710662 vs single 0.824724 (-0.114062); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day15_full_handicap_d4",
+        "system": "crew",
+        "evidence": "5 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "plan_underfit",
+        "group": "bad_plan",
+        "stage": "planner",
+        "outcome": "handled",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day15_full_handicap_d4",
+        "system": "crew",
+        "evidence": "CV r2=0.0022 is at/below the underfit floor (0.1) \u2014 the candidates are barely beating chance. [recovered by a later pass]"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day15_full_handicap_d4",
+        "system": "crew",
+        "evidence": "ensemble CV 0.710662 vs single 0.824724 (-0.114062); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day15_full_natural_d1",
+        "system": "crew",
+        "evidence": "4 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day15_full_natural_d1",
+        "system": "crew",
+        "evidence": "ensemble CV 0.713769 vs single 0.821448 (-0.107678); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day15_full_natural_d3",
+        "system": "crew",
+        "evidence": "4 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day15_full_natural_d3",
+        "system": "crew",
+        "evidence": "ensemble CV 0.713769 vs single 0.821448 (-0.107678); chooser kept single"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day16_full_mock",
+        "system": "crew",
+        "evidence": "ensemble CV 0.713769 vs single 0.821448 (-0.107678); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "vehicle",
+        "run": "vehicle/day14_full",
+        "system": "crew",
+        "evidence": "4 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "vehicle",
+        "run": "vehicle/day14_full",
+        "system": "crew",
+        "evidence": "ensemble CV 0.781353 vs single 0.793108 (-0.011755); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "vehicle",
+        "run": "vehicle/day14_no_feature_engineer",
+        "system": "crew",
+        "evidence": "3 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "vehicle",
+        "run": "vehicle/day14_no_feature_engineer",
+        "system": "crew",
+        "evidence": "ensemble CV 0.784476 vs single 0.79322 (-0.008744); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "vehicle",
+        "run": "vehicle/day14_no_planner",
+        "system": "crew",
+        "evidence": "4 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "vehicle",
+        "run": "vehicle/day15_full_natural_d1",
+        "system": "crew",
+        "evidence": "4 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "vehicle",
+        "run": "vehicle/day15_full_natural_d1",
+        "system": "crew",
+        "evidence": "ensemble CV 0.781353 vs single 0.793108 (-0.011755); chooser kept single"
+      },
+      {
+        "category": "provider_outage",
+        "group": "provider",
+        "stage": "llm",
+        "outcome": "handled",
+        "dataset": "vehicle",
+        "run": "vehicle/day15_full_natural_d3",
+        "system": "crew",
+        "evidence": "4 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "vehicle",
+        "run": "vehicle/day15_full_natural_d3",
+        "system": "crew",
+        "evidence": "ensemble CV 0.781353 vs single 0.793108 (-0.011755); chooser kept single"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "vehicle",
+        "run": "vehicle/day16_full_mock",
+        "system": "crew",
+        "evidence": "ensemble CV 0.781353 vs single 0.793108 (-0.011755); chooser kept single"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "cpu_small",
+        "run": "cpu_small/day11_report",
+        "system": "crew",
+        "evidence": "ensemble CV 0.948561 vs single 0.977949 (-0.029388); chooser kept single"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "diabetes",
+        "run": "diabetes/day11_report",
+        "system": "crew",
+        "evidence": "ensemble CV 0.824038 vs single 0.83718 (-0.013142); chooser kept single"
+      },
+      {
+        "category": "plan_underfit",
+        "group": "bad_plan",
+        "stage": "planner",
+        "outcome": "degraded",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day11_report",
+        "system": "crew",
+        "evidence": "finding code 'underfit' recorded by the Critic [still present when the budget cut the loop off]"
+      },
+      {
+        "category": "budget_cutoff",
+        "group": "budget",
+        "stage": "critic/router",
+        "outcome": "degraded",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day11_report",
+        "system": "crew",
+        "evidence": "iteration budget reached (1/1) \u2014 finalising; findings remaining: [underfit]"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "kin8nm",
+        "run": "kin8nm/day11_report",
+        "system": "crew",
+        "evidence": "ensemble CV 0.000655 vs single 0.002198 (-0.001542); chooser kept single"
+      },
+      {
+        "category": "ensemble_regression",
+        "group": "ensemble",
+        "stage": "ensembler",
+        "outcome": "handled",
+        "dataset": "vehicle",
+        "run": "vehicle/day11_report",
+        "system": "crew",
+        "evidence": "ensemble CV 0.781353 vs single 0.793108 (-0.011755); chooser kept single"
+      },
+      {
+        "category": "plan_search_invalid",
+        "group": "bad_plan",
+        "stage": "planner",
+        "outcome": "fatal",
+        "dataset": "kin8nm",
+        "run": "day03_solo",
+        "system": "solo",
+        "evidence": "ValueError: Invalid parameter 'alpha' for estimator LinearRegression(). Valid parameters are: ['copy_X', 'fit_intercept', 'n_jobs', 'positive', 'tol']."
+      },
+      {
+        "category": "exec_timeout",
+        "group": "exec_error",
+        "stage": "executor",
+        "outcome": "fatal",
+        "dataset": "vehicle",
+        "run": "day03_solo",
+        "system": "solo",
+        "evidence": "TimeoutExpired: Command '['C:\\\\Users\\\\antho\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python311\\\\python.exe', 'C:\\\\Users\\\\antho\\\\OneDrive\\\\Desktop\\\\Mark\\\\ALL\\\\DATA_SCIENTIST\\\\CrewML\\\\artifacts\\\\solo\\\\vehicle\\\\runner.py']' timed out after 120 seconds"
+      }
+    ]
+  },
+  "probes": {
+    "live_leak": [
+      {
+        "probe": "leak_blatant",
+        "base_dataset": "cpu_small",
+        "ground_truth": {
+          "kind": "blatant",
+          "task": "regression",
+          "column": "leak_probe",
+          "measure": "pearson_corr_with_target",
+          "measured_signal": 1.0
+        },
+        "expectation": "caught (screen must fire)",
+        "profiler_flagged": true,
+        "plan_dropped": true,
+        "critic_leakage_finding": false,
+        "detected": true,
+        "model_saw_leak": false,
+        "cv_score": 0.977949,
+        "cv_metric": "r2",
+        "iterations_run": 1,
+        "mock": false,
+        "seconds": 107.11,
+        "events": [
+          {
+            "category": "provider_outage",
+            "group": "provider",
+            "stage": "llm",
+            "outcome": "handled",
+            "dataset": "probe_leak_blatant",
+            "run": "day17_probe_leak_blatant",
+            "system": "crew",
+            "evidence": "4 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+          },
+          {
+            "category": "ensemble_regression",
+            "group": "ensemble",
+            "stage": "ensembler",
+            "outcome": "handled",
+            "dataset": "probe_leak_blatant",
+            "run": "day17_probe_leak_blatant",
+            "system": "crew",
+            "evidence": "ensemble CV 0.948561 vs single 0.977949 (-0.029388); chooser kept single"
+          }
+        ]
+      },
+      {
+        "probe": "leak_subtle",
+        "base_dataset": "credit-g",
+        "ground_truth": {
+          "kind": "subtle",
+          "task": "classification",
+          "column": "leak_probe",
+          "measure": "agreement_with_target",
+          "measured_signal": 0.95
+        },
+        "expectation": "missed (engineered inside the detection window)",
+        "profiler_flagged": false,
+        "plan_dropped": false,
+        "critic_leakage_finding": false,
+        "detected": false,
+        "model_saw_leak": true,
+        "cv_score": 0.968713,
+        "cv_metric": "roc_auc",
+        "iterations_run": 1,
+        "mock": false,
+        "seconds": 39.69,
+        "events": [
+          {
+            "category": "provider_outage",
+            "group": "provider",
+            "stage": "llm",
+            "outcome": "handled",
+            "dataset": "probe_leak_subtle",
+            "run": "day17_probe_leak_subtle",
+            "system": "crew",
+            "evidence": "4 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+          },
+          {
+            "category": "ensemble_regression",
+            "group": "ensemble",
+            "stage": "ensembler",
+            "outcome": "handled",
+            "dataset": "probe_leak_subtle",
+            "run": "day17_probe_leak_subtle",
+            "system": "crew",
+            "evidence": "ensemble CV 0.965923 vs single 0.968713 (-0.002790); chooser kept single"
+          },
+          {
+            "category": "leakage_missed",
+            "group": "missed_leakage",
+            "stage": "profiler/planner/critic",
+            "outcome": "missed",
+            "dataset": "probe_leak_subtle",
+            "run": "day17_probe_leak_subtle",
+            "system": "crew",
+            "evidence": "injected 'leak_probe' (agreement_with_target=0.95) passed every screen; the model trained on it (CV roc_auc=0.968713)"
+          }
+        ]
+      }
+    ],
+    "live_timeout": {
+      "probe": "exec_timeout",
+      "base_dataset": "cpu_small",
+      "ok": true,
+      "cap_s": 5,
+      "expectation": "trainer killed at the cap; Critic files execution_error and finalises",
+      "trainer_timed_out": true,
+      "critic_filed_blocker": true,
+      "detected": true,
+      "mock": false,
+      "seconds": 346.06,
+      "events": [
+        {
+          "category": "provider_outage",
+          "group": "provider",
+          "stage": "llm",
+          "outcome": "handled",
+          "dataset": "cpu_small",
+          "run": "day17_probe_timeout_cpu_small",
+          "system": "crew",
+          "evidence": "4 LLM surface(s) fell back; first: BadRequestError: Error code: 400 - {'error': {'message': 'Organization has been restricted. Please reach out to support if you believe this was in error.', 'type': 'invalid_request_error', 'code': 'organization_restricted'}}"
+        },
+        {
+          "category": "exec_timeout",
+          "group": "exec_error",
+          "stage": "executor",
+          "outcome": "fatal",
+          "dataset": "cpu_small",
+          "run": "day17_probe_timeout_cpu_small",
+          "system": "crew",
+          "evidence": "execution exceeded timeout of 5s"
+        }
+      ]
+    },
+    "record_level": [
+      {
+        "probe": "wrong_metric",
+        "record_level": true,
+        "mutation": "plan.cv.scoring set to 'accuracy' (primary metric unchanged)",
+        "expected_code": "wrong_metric",
+        "detected": true,
+        "detector": "crewml.crew.critic.diagnose",
+        "finding_codes": [
+          "wrong_metric"
+        ]
+      },
+      {
+        "probe": "exec_error",
+        "record_level": true,
+        "mutation": "training.ok forced False with a real-shaped sklearn error",
+        "expected_code": "execution_error",
+        "detected": true,
+        "detector": "crewml.crew.critic.diagnose",
+        "finding_codes": [
+          "execution_error"
+        ]
+      }
+    ],
+    "summary": {
+      "n_events": 7,
+      "by_category": {
+        "provider_outage": {
+          "group": "provider",
+          "stage": "llm",
+          "total": 3,
+          "by_outcome": {
+            "handled": 3
+          },
+          "by_system": {
+            "crew": 3
+          }
+        },
+        "ensemble_regression": {
+          "group": "ensemble",
+          "stage": "ensembler",
+          "total": 2,
+          "by_outcome": {
+            "handled": 2
+          },
+          "by_system": {
+            "crew": 2
+          }
+        },
+        "leakage_missed": {
+          "group": "missed_leakage",
+          "stage": "profiler/planner/critic",
+          "total": 1,
+          "by_outcome": {
+            "missed": 1
+          },
+          "by_system": {
+            "crew": 1
+          }
+        },
+        "exec_timeout": {
+          "group": "exec_error",
+          "stage": "executor",
+          "total": 1,
+          "by_outcome": {
+            "fatal": 1
+          },
+          "by_system": {
+            "crew": 1
+          }
+        }
+      },
+      "by_outcome": {
+        "fatal": 1,
+        "degraded": 0,
+        "handled": 5,
+        "detected": 0,
+        "missed": 1
+      },
+      "fatal_by_system": {
+        "crew": 1
+      }
+    }
+  }
+}
