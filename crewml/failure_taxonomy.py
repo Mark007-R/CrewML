@@ -816,13 +816,27 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"{s.get('crew', 0)} | {s.get('solo', 0)} |"
         )
     fatal = summary["fatal_by_system"]
+    n_crew_fatal = fatal.get("crew", 0)
+    if n_crew_fatal:
+        crew_fatal_note = (
+            f"The {n_crew_fatal} crew-side fatal(s) were each *caught and filed* — the Critic "
+            "recorded the `execution_error` blocker and finalised honestly without a model "
+            "rather than shipping garbage; automated self-repair (feed the traceback back and "
+            "retry) is Day 20's feature and these are its motivating cases. Every other "
+            "crew-side event was absorbed by a guard (`handled`), disclosed as "
+            "quality-impacting (`degraded`), or recorded (`detected`)."
+        )
+    else:
+        crew_fatal_note = (
+            "Every crew-side event above was either absorbed by a guard (`handled`), "
+            "disclosed as quality-impacting (`degraded` — the deliberate budget-starvation "
+            "runs of Day 15), or recorded with indeterminate impact (`detected`)."
+        )
     lines += [
         "",
-        f"Fatal failures (no scored model): **crew {fatal.get('crew', 0)}** vs "
-        f"**solo {fatal.get('solo', 0)}** across the whole archive. Every crew-side event "
-        "above was either absorbed by a guard (`handled`), disclosed as quality-impacting "
-        "(`degraded` — the deliberate budget-starvation runs of Day 15), or recorded with "
-        "indeterminate impact (`detected`). The solo agent's failures are all fatal: it has "
+        f"Fatal failures (no scored model): **crew {n_crew_fatal}** vs "
+        f"**solo {fatal.get('solo', 0)}** across the whole archive. " + crew_fatal_note
+        + " The solo agent's failures are all fatal: it has "
         "no Critic to file the fault, no fallback to absorb it, and no chooser to contain it.",
         "",
         "## Injection probes — is each surface actually live?",

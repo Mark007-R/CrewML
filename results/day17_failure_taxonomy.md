@@ -20,20 +20,21 @@
 | `loop_no_actuator` | budget | critic | cross-pass score delta (loop fired, nothing moved) |
 | `ensemble_regression` | ensemble | ensembler | Ensembler same-fold CV comparison + chooser |
 
-## Archive census — 43 crew runs + 5 solo-agent runs
+## Archive census — 50 crew runs + 5 solo-agent runs
 
 | Category | Total | fatal | degraded | handled | detected | crew | solo |
 |---|---|---|---|---|---|---|---|
-| `ensemble_regression` | 36 | 0 | 0 | 36 | 0 | 36 | 0 |
-| `provider_outage` | 33 | 0 | 0 | 33 | 0 | 33 | 0 |
-| `plan_underfit` | 9 | 0 | 3 | 6 | 0 | 9 | 0 |
-| `budget_cutoff` | 3 | 0 | 3 | 0 | 0 | 3 | 0 |
+| `ensemble_regression` | 42 | 0 | 0 | 42 | 0 | 42 | 0 |
+| `provider_outage` | 35 | 0 | 0 | 35 | 0 | 35 | 0 |
+| `plan_underfit` | 8 | 0 | 2 | 6 | 0 | 8 | 0 |
+| `budget_cutoff` | 2 | 0 | 2 | 0 | 0 | 2 | 0 |
 | `imbalance_unhandled` | 2 | 0 | 0 | 0 | 2 | 2 | 0 |
 | `loop_no_actuator` | 2 | 0 | 0 | 0 | 2 | 2 | 0 |
+| `exec_error` | 1 | 1 | 0 | 0 | 0 | 1 | 0 |
 | `plan_search_invalid` | 1 | 1 | 0 | 0 | 0 | 0 | 1 |
 | `exec_timeout` | 1 | 1 | 0 | 0 | 0 | 0 | 1 |
 
-Fatal failures (no scored model): **crew 0** vs **solo 2** across the whole archive. Every crew-side event above was either absorbed by a guard (`handled`), disclosed as quality-impacting (`degraded` — the deliberate budget-starvation runs of Day 15), or recorded with indeterminate impact (`detected`). The solo agent's failures are all fatal: it has no Critic to file the fault, no fallback to absorb it, and no chooser to contain it.
+Fatal failures (no scored model): **crew 1** vs **solo 2** across the whole archive. The 1 crew-side fatal(s) were each *caught and filed* — the Critic recorded the `execution_error` blocker and finalised honestly without a model rather than shipping garbage; automated self-repair (feed the traceback back and retry) is Day 20's feature and these are its motivating cases. Every other crew-side event was absorbed by a guard (`handled`), disclosed as quality-impacting (`degraded`), or recorded (`detected`). The solo agent's failures are all fatal: it has no Critic to file the fault, no fallback to absorb it, and no chooser to contain it.
 
 ## Injection probes — is each surface actually live?
 
@@ -47,6 +48,4 @@ Fatal failures (no scored model): **crew 0** vs **solo 2** across the whole arch
 
 ### The measured detection window (the honest finding)
 
-The subtle probe planted a leaked column agreeing with the target on 95.0% of rows — below the Profiler's purity screen (0.995) — and the resulting CV score (roc_auc=0.968713) stayed under the Critic's too-good-to-be-true ceiling (0.995). **No surface fired and the model trained on the leak.** That window — leak strong enough to inflate the score, weak enough to pass both screens — is a real, now-measured gap. Logged as Day 22 (leakage & honesty guards) input, not patched today: the taxonomy's job is to find gaps, and papering one over inside the study that found it would defeat the study.
-
-*Provider status:* a key is configured but every LLM call failed during the live probes (see the runs' `provider_outage` events — the Day-15 Groq restriction is still in effect), so all probe runs executed on the deterministic core. Detection surfaces are deterministic by design, so the probe verdicts are unaffected — but no number here is a live-LLM result.
+The subtle probe planted a leaked column agreeing with the target on 95.0% of rows — below the Profiler's purity screen (0.995) — and the resulting CV score (roc_auc=0.964435) stayed under the Critic's too-good-to-be-true ceiling (0.995). **No surface fired and the model trained on the leak.** That window — leak strong enough to inflate the score, weak enough to pass both screens — is a real, now-measured gap. Logged as Day 22 (leakage & honesty guards) input, not patched today: the taxonomy's job is to find gaps, and papering one over inside the study that found it would defeat the study.

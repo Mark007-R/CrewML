@@ -415,14 +415,20 @@ def render_markdown(report: dict) -> str:
             f"{spec['usd_per_mtok_in']:.2f} | {spec['usd_per_mtok_out']:.2f} | "
             f"{spec['pricing_note']} |"
         )
-    lines += [
-        "",
+    any_live_cost = any(
+        rec.get("llm_cost_usd") is not None
+        for arm in report["arms"].values() for rec in arm.values()
+    )
+    cost_note = (
         "*A run's cost is only ever computed from tokens the accounting actually measured "
-        "(`llm_usage`, live calls only). No live arm ran this session, so no cost is "
-        "reported — the model above is wired into the runner and prices any future live "
-        "arm with no code change.*",
-        "",
-    ]
+        "(`llm_usage`, live calls only). "
+        + ("Live-arm costs below are measured-token totals priced at the rates above."
+           if any_live_cost else
+           "No live arm ran this session, so no cost is reported — the model above is "
+           "wired into the runner and prices any future live arm with no code change.")
+        + "*"
+    )
+    lines += ["", cost_note, ""]
 
     # Per-arm quality/latency tables.
     for provider, arm in report["arms"].items():
@@ -447,6 +453,17 @@ def render_markdown(report: dict) -> str:
                 f"{toks if toks is not None else '—'} | "
                 f"{('$' + format(rec['llm_cost_usd'], '.4f')) if rec.get('llm_cost_usd') is not None else '—'} |"
             )
+        # A failed run is evidence, not a blank cell — say what happened, in the
+        # study's own words (the scoring error + the Critic's final verdict).
+        for key, rec in arm.items():
+            if not rec.get("ok"):
+                codes = ", ".join(rec.get("final_finding_codes") or []) or "none recorded"
+                lines += [
+                    "",
+                    f"*`{key}` shipped no scorable model: {rec.get('error')} — Critic verdict: "
+                    f"\"{rec.get('final_reason')}\" (finding codes: {codes}). The full failing "
+                    "state is archived; the failure stands on the board as a result in itself.*",
+                ]
         lines.append("")
 
     # Resilience equality.
