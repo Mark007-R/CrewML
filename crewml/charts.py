@@ -555,3 +555,116 @@ def plot_failure_taxonomy(report: dict, path: Path = FAILURE_TAXONOMY_CHART_PATH
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return path
+
+
+PHASE3_SUMMARY_CHART_PATH = CHARTS_DIR / "day18_phase3_summary.png"
+
+
+def plot_phase3_summary(report: dict, path: Path = PHASE3_SUMMARY_CHART_PATH) -> Path:
+    """The Day-18 consolidation figure: the phase's four headline findings on one
+    canvas, each panel a compact restatement of one study's committed chart.
+
+    Like :mod:`crewml.phase3_results`, this draws from the consolidated report only —
+    a rival with no score leaves a gap, a probe-only number is hatched as such, and
+    the ``missed`` leakage probe is drawn in the failure panel rather than omitted.
+    """
+    board = report["board"]
+    agents = report["agents"]
+    critic = report["critic"]
+    depth = report["depth"]
+    fail = report["failures"]
+
+    fig, axes = plt.subplots(2, 2, figsize=(12.5, 8.6))
+    ax_delta, ax_attr, ax_depth, ax_fail = axes.flat
+
+    # --- Panel 1: crew − rival deltas (Day 12) ---
+    keys = list(board["rows"])
+    width = 0.8 / len(HEADLINE_DELTAS)
+    for i, (name, _, label) in enumerate(HEADLINE_DELTAS):
+        for j, key in enumerate(keys):
+            d = board["rows"][key]["deltas"].get(name)
+            if d is None:  # no comparison — a gap, never a zero bar
+                continue
+            ax_delta.bar(j + i * width - 0.4 + width / 2, d, width=width,
+                         color=WIN_COLOUR if d > 0 else LOSS_COLOUR,
+                         edgecolor="white", linewidth=0.5, hatch=DELTA_HATCHES[i])
+    ax_delta.axhline(0, color="#333", linewidth=1)
+    ax_delta.set_xticks(range(len(keys)))
+    ax_delta.set_xticklabels(keys, fontsize=7)
+    ax_delta.set_title("Crew − rival, locked holdout (Day 12)\n"
+                       "hatch: none=solo, //=AutoML, xx=default RF",
+                       fontsize=9, fontweight="bold")
+    ax_delta.spines[["top", "right"]].set_visible(False)
+    ax_delta.margins(y=0.15)
+
+    # --- Panel 2: per-agent attribution (Days 13-14) ---
+    drops = agents["drops_by_dataset"]
+    probe_rec = critic["probe_recovery_by_dataset"]
+    akeys = list(drops)
+    aw = 0.26
+    for j, key in enumerate(akeys):
+        p = drops[key].get("planner")
+        f = drops[key].get("feature_engineer")
+        c = probe_rec.get(key)
+        if p is not None:
+            ax_attr.bar(j - aw, p, width=aw, color=SYSTEM_COLOURS["automl_flaml"],
+                        label="Planner drop" if j == 0 else None)
+        if f is not None:
+            ax_attr.bar(j, f, width=aw, color=SYSTEM_COLOURS["solo_agent"],
+                        label="FE drop" if j == 0 else None)
+        if c is not None:  # probe-sourced, hatched: an instrumented number, not natural
+            ax_attr.bar(j + aw, c, width=aw, color=SYSTEM_COLOURS["crew"],
+                        hatch="//", edgecolor="white",
+                        label="Critic recovery (probe)" if key == list(probe_rec)[0] else None)
+    ax_attr.axhline(0, color="#333", linewidth=1)
+    ax_attr.set_xticks(range(len(akeys)))
+    ax_attr.set_xticklabels(akeys, fontsize=7)
+    ax_attr.set_title("What removing each agent costs (Days 13–14)\n"
+                      "drop = full − ablated; Critic bar is the forced-deficiency probe",
+                      fontsize=9, fontweight="bold")
+    ax_attr.legend(fontsize=7, frameon=False)
+    ax_attr.spines[["top", "right"]].set_visible(False)
+
+    # --- Panel 3: iteration-depth cliff (Day 15) ---
+    for key, curve in depth["probe_curves"].items():
+        ds = sorted(curve)
+        ax_depth.plot(ds, [curve[d] for d in ds], marker="o", linewidth=2, label=key)
+        bound = depth["probe_summary"].get(key, {}).get("budget_bound_depths", [])
+        for b in bound:
+            if b in curve:
+                ax_depth.plot([b], [curve[b]], marker="x", markersize=11,
+                              color=LOSS_COLOUR, markeredgewidth=2.5)
+    ax_depth.set_xlabel("Critic-loop budget (max_iterations)", fontsize=8)
+    ax_depth.set_ylabel("holdout R²", fontsize=8)
+    ax_depth.set_xticks(sorted({d for c in depth["probe_curves"].values() for d in c}))
+    ax_depth.set_title("Depth-response under forced deficiency (Day 15)\n"
+                       "× = budget-bound (cut off, not done); natural sweep is flat",
+                       fontsize=9, fontweight="bold")
+    ax_depth.legend(fontsize=7, frameon=False, loc="lower right")
+    ax_depth.spines[["top", "right"]].set_visible(False)
+
+    # --- Panel 4: failure outcomes + fatal headline (Day 17) ---
+    outcomes = [o for o in OUTCOME_COLOURS if fail["by_outcome"].get(o)]
+    values = [fail["by_outcome"][o] for o in outcomes]
+    bars = ax_fail.bar(outcomes, values, color=[OUTCOME_COLOURS[o] for o in outcomes])
+    for bar, v in zip(bars, values):
+        ax_fail.text(bar.get_x() + bar.get_width() / 2, v, str(v),
+                     ha="center", va="bottom", fontsize=8, fontweight="bold")
+    fatal = fail["fatal_by_system"]
+    ax_fail.set_title(
+        f"Failure outcomes, {fail['n_events']} archived events (Day 17)\n"
+        f"fatal: crew {fatal.get('crew', 0)} vs solo {fatal.get('solo', 0)} "
+        f"(of {fail['n_crew_runs']} / {fail['n_solo_runs']} runs)",
+        fontsize=9, fontweight="bold")
+    ax_fail.set_yscale("log")  # handled dwarfs the rest; log keeps the rare outcomes legible
+    ax_fail.set_ylabel("events (log)", fontsize=8)
+    ax_fail.tick_params(axis="x", labelsize=7)
+    ax_fail.spines[["top", "right"]].set_visible(False)
+
+    fig.suptitle("CrewML — Phase 3 consolidated results (Days 12–17)",
+                 fontsize=13, fontweight="bold")
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path
