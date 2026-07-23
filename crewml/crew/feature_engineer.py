@@ -77,6 +77,50 @@ DEFAULT_FE_SOURCE = textwrap.dedent(
 )
 
 
+# --- Ablation stand-in (Day 14) — the FE a crew with NO Feature Engineer runs
+
+IDENTITY_FE_SOURCE = textwrap.dedent(
+    '''\
+    """Identity feature engineering — the Day-14 ``no_feature_engineer`` ablation.
+
+    Adds nothing: the model trains on the raw feature frame exactly as loaded.
+    This is the honest meaning of "remove the Feature Engineer" — the Trainer's
+    contract still requires an ``add_features`` callable, so removal means the
+    identity transform, not a competing feature set.
+    """
+    import pandas as pd
+
+
+    def add_features(df: pd.DataFrame) -> pd.DataFrame:
+        return df
+    '''
+)
+
+
+def run_identity_fe(dataset_key: str) -> dict[str, Any]:
+    """The ``no_feature_engineer`` variant's FE step: identity code, no LLM (Day 14).
+
+    Mirrors :func:`run_feature_engineer`'s return shape (``{"code", "meta"}``) so the
+    Trainer and Reporter consume it unchanged. The identity source is still put
+    through the same sandbox validation as any other FE code — not because it could
+    fail the contract, but so every arm of the ablation carries the same evidence
+    trail (``meta.validation``) and no arm is trusted on argument alone.
+    """
+    return {
+        "code": IDENTITY_FE_SOURCE,
+        "meta": {
+            "schema_version": FE_SCHEMA_VERSION,
+            "node": "feature_engineer_identity",
+            "ablated": "feature_engineer",
+            "dataset_key": dataset_key,
+            "is_mock": config.is_mock_mode(),
+            "source": "ablated",
+            "reason": "no_feature_engineer variant — identity transform, no generation",
+            "validation": _validate_fe(IDENTITY_FE_SOURCE, dataset_key),
+        },
+    }
+
+
 # --- LLM prompt for dataset-specific feature engineering --------------------
 
 _FE_SYSTEM_PROMPT = textwrap.dedent(

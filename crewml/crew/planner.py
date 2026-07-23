@@ -308,6 +308,56 @@ def _apply_critique(plan: dict[str, Any], critique: Optional[dict[str, Any]]) ->
     plan["critique_adjustments"] = adjustments
 
 
+# --- Ablation instrumentation (Day 13) — OFF unless explicitly enabled -------
+
+def _apply_ablation_handicap(plan: dict[str, Any], iteration: int) -> None:
+    """Cripple the FIRST pass's model capacity — ablation instrumentation only.
+
+    Gated behind ``CREWML_ABLATION_HANDICAP`` (default ``"0"`` — a normal run never
+    touches this). It exists for one purpose: the Critic loop is a *conditional*
+    safeguard, so on healthy datasets the Critic correctly finalises on pass 1 and the
+    loop never fires — which makes its contribution invisible to measure. This hook
+    collapses every capacity knob on the first pass to a near-stump so the winning CV
+    score falls at/below the Critic's underfit floor. Then the loop's value becomes
+    observable: *with* the Critic, an ``underfit`` finding fires and the Planner restores
+    capacity on the next pass (:func:`_apply_critique`); *without* it (the ``no_critic``
+    variant), the crew ships the crippled model. The gap between the two is the loop's
+    contribution, cleanly attributable.
+
+    Only the first pass (``iteration == 0``) is handicapped — recovery on later passes is
+    exactly the loop's job, not something this hook grants for free.
+    """
+    if os.getenv("CREWML_ABLATION_HANDICAP", "0") == "0":
+        return
+    if int(iteration) != 0:
+        return
+    for m in plan["candidate_models"]:
+        g = m["param_grid"]
+        if "model__max_iter" in g:
+            g["model__max_iter"] = [1]
+        if "model__max_leaf_nodes" in g:
+            g["model__max_leaf_nodes"] = [2]
+        if "model__learning_rate" in g:
+            g["model__learning_rate"] = [0.01]
+        if "model__max_depth" in g:
+            g["model__max_depth"] = [1]
+        if "model__n_estimators" in g:
+            g["model__n_estimators"] = [1]
+        if "model__min_samples_leaf" in g:
+            # Larger than any split can honour -> the tree cannot branch, so even a
+            # depth-1 forest collapses to a near-constant predictor (a lone stump can
+            # otherwise clear the underfit floor on its own on easy regression sets).
+            g["model__min_samples_leaf"] = [10_000_000]
+        if "model__C" in g:
+            g["model__C"] = [1e-4]     # near-zero-capacity linear
+        if "model__alpha" in g:
+            g["model__alpha"] = [1e6]  # extreme shrinkage -> underfit
+    plan["ablation_handicap"] = (
+        "first-pass capacity capped to a near-stump (CREWML_ABLATION_HANDICAP=1); "
+        "ablation instrumentation, not a production setting"
+    )
+
+
 # --- Public: build the deterministic plan -----------------------------------
 
 def build_plan(
@@ -346,6 +396,7 @@ def build_plan(
     }
     plan["recommended_primary_model"] = plan["candidate_models"][0]["name"]
     plan["rationale"] = _rationale(profile, plan)
+    _apply_ablation_handicap(plan, iteration)  # no-op unless CREWML_ABLATION_HANDICAP=1
     _apply_critique(plan, critique)  # no-op on the first pass
     return plan
 
@@ -374,6 +425,109 @@ def _rationale(profile: dict[str, Any], plan: dict[str, Any]) -> list[str]:
         + f" (start with {plan['recommended_primary_model']})."
     )
     return notes
+
+
+# --- Ablation stand-in (Day 14) — the plan a crew with NO Planner would run --
+
+def build_naive_plan(profile: dict[str, Any]) -> dict[str, Any]:
+    """The profile-blind plan the ``no_planner`` ablation variant runs (Day 14).
+
+    The Planner cannot be deleted the way the Critic could: the Trainer needs *a*
+    plan to execute at all, so removing the specialist means replacing it with the
+    naive floor — what a crew with no planning expertise would do. This plan reads
+    only the bare schema facts no pipeline can run without (which columns are
+    numeric vs. categorical, the task/metric, and the protocol's positive class —
+    a property of the eval protocol, not a planning decision) and ignores
+    everything the real Planner reasons over:
+
+    * **No leakage screen.** Nothing is dropped — id-like columns, constants,
+      duplicates and target-leakage suspects all ride into the model.
+    * **No cardinality awareness.** Every categorical is one-hot encoded, however
+      wide that makes the feature space.
+    * **No disguised-missing handling.** Zeros stay zeros.
+    * **No imbalance strategy.** Class skew is never assessed, so no class weights.
+    * **One default model, no search.** A single RandomForest with library
+      defaults (the empty grid disables the Trainer's search) instead of the
+      Planner's ordered families with seed grids.
+    * **Critique-deaf.** The critique parameter is deliberately absent: on a
+      Critic-triggered re-entry this function rebuilds the identical plan, so the
+      loop has no actuator — measuring exactly that is part of the ablation.
+
+    Keeps :data:`PLAN_SCHEMA_VERSION`'s shape so the Trainer, Critic, Ensembler
+    and Reporter consume it unchanged — the variant differs in plan *content* only.
+    """
+    task = profile["task"]
+    numeric = list(profile["columns"]["numeric"])
+    categorical = list(profile["columns"]["categorical"])
+
+    estimator = "RandomForestClassifier" if task == "classification" else "RandomForestRegressor"
+    candidate = {
+        "name": "random_forest",
+        "estimator": estimator,
+        "family": "tree", "needs_scaling": False,
+        "supports_proba": task == "classification",
+        "supports_class_weight": task == "classification",
+        "param_grid": {},  # empty grid => the Trainer skips its search entirely
+        "rationale": "naive floor: one library-default model, no profile-driven choice, no search",
+    }
+
+    plan: dict[str, Any] = {
+        "schema_version": PLAN_SCHEMA_VERSION,
+        "stub": False,
+        "node": "planner_naive",
+        "ablated": "planner",
+        "dataset_key": profile["dataset_key"],
+        "task": task,
+        "subtype": profile["subtype"],
+        "metric": profile["metric"],
+        "planning_for_iteration": 0,
+        "drop_columns": [],
+        "drop_reasons": [],
+        "preprocessing": {
+            "numeric": {
+                "columns": numeric,
+                "impute": "median",
+                "scale": "standard",
+                "zero_as_missing": [],
+                "zero_as_missing_is_heuristic": False,
+            },
+            "categorical": {
+                "columns": categorical,
+                "impute": "most_frequent",
+                "onehot_columns": categorical,  # cardinality-blind: one-hot everything
+                "onehot_params": {"handle_unknown": "ignore"},
+                "ordinal_columns": [],
+            },
+            "drop_columns": [],
+        },
+        "candidate_models": [candidate],
+        "cv": {
+            "scheme": "StratifiedKFold" if task == "classification" else "KFold",
+            "n_splits": DEFAULT_CV_SPLITS,  # fixed; never clamped to the rarest class
+            "shuffle": True,
+            "random_state": config.SEED,
+            "scoring": _SCORER_FOR_METRIC.get(profile["metric"], profile["metric"]),
+        },
+        "imbalance_strategy": {
+            "recommended": False,
+            "reason": "no planner — class balance never assessed",
+            # The protocol's positive class is part of the task definition (it keeps
+            # the 0/1 label mapping — and therefore held-out ROC AUC — identical
+            # across arms); carrying it is NOT a planning decision.
+            "positive_class": (profile.get("target") or {}).get("positive_class"),
+        },
+        "recommended_primary_model": "random_forest",
+        "rationale": [
+            "ABLATION (no_planner): profile-blind naive plan — no leakage drops, "
+            "one-hot for every categorical, no imbalance handling, a single "
+            "library-default RandomForest with no search, critique-deaf on re-entry.",
+        ],
+    }
+    plan["llm_narrative"] = {
+        "source": "unavailable", "is_mock": config.is_mock_mode(),
+        "reason": "ablated — the no_planner variant has no planning specialist", "text": None,
+    }
+    return plan
 
 
 # --- Optional LLM narrative (advisory, never a source of decisions) ----------

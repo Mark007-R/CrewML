@@ -25,7 +25,8 @@ from typing import Any
 from crewml.config import MAX_ITERATIONS
 from crewml.crew.critic import run_critic
 from crewml.crew.ensembler import run_ensembler
-from crewml.crew.feature_engineer import run_feature_engineer
+from crewml.crew.feature_engineer import run_feature_engineer, run_identity_fe
+from crewml.crew.planner import build_naive_plan as run_naive_planner
 from crewml.crew.planner import run_planner
 from crewml.crew.profiler import run_profiler
 from crewml.crew.reporter import run_reporter
@@ -98,6 +99,32 @@ def trainer(state: CrewState) -> dict[str, Any]:
         iteration=state.get("iteration", 0),
     )
     return {"training": training, "trace": ["trainer"]}
+
+
+# --- Ablation stand-ins (Day 14) — naive floors, not smarter alternatives ---
+
+def naive_planner(state: CrewState) -> dict[str, Any]:
+    """Planner stand-in for the ``no_planner`` ablation variant (Day 14).
+
+    Emits :func:`crewml.crew.planner.build_naive_plan` — the profile-blind naive
+    floor — under the same state key and trace name as the real Planner, so the
+    topology (including the Critic's loop edge back to this node) is untouched.
+    Deliberately ignores ``critiques``: without a planning specialist the loop has
+    no actuator, and on a re-entry this node rebuilds the identical plan.
+    """
+    plan = run_naive_planner(state["profile"])
+    return {"plan": plan, "trace": ["planner"]}
+
+
+def identity_feature_engineer(state: CrewState) -> dict[str, Any]:
+    """Feature Engineer stand-in for the ``no_feature_engineer`` variant (Day 14).
+
+    Ships the identity ``add_features`` (raw features only, no LLM, no default
+    engineered column) via :func:`crewml.crew.feature_engineer.run_identity_fe`,
+    under the same state keys and trace name as the real node.
+    """
+    result = run_identity_fe(state["dataset_key"])
+    return {"fe_code": result["code"], "fe_meta": result["meta"], "trace": ["feature_engineer"]}
 
 
 # --- Critic + its conditional edge -----------------------------------------

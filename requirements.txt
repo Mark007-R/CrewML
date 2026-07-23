@@ -25,6 +25,9 @@ lightgbm>=4.0
 xgboost>=2.0
 catboost>=1.2
 
+# --- Charts (Phase 3 comparison studies) ---
+matplotlib>=3.8
+
 # --- Serving / dashboard (Phase 5) ---
 fastapi>=0.110
 uvicorn>=0.29
