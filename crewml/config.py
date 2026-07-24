@@ -42,6 +42,15 @@ MAX_ITERATIONS = int(os.getenv("CREWML_MAX_ITERATIONS", "3"))
 EXECUTOR_TIMEOUT_S = int(os.getenv("CREWML_EXECUTOR_TIMEOUT_S", "120"))
 RUN_TOKEN_BUDGET = int(os.getenv("CREWML_RUN_TOKEN_BUDGET", "200000"))
 
+# --- Executor sandbox (Day 19 hardening) ---
+# On by default; CREWML_EXECUTOR_SANDBOX=0 is the explicit escape hatch.
+EXECUTOR_SANDBOX = os.getenv("CREWML_EXECUTOR_SANDBOX", "1").lower() not in (
+    "0", "false", "off",
+)
+# Child memory cap in MiB (0 = uncapped). POSIX: hard RLIMIT_AS; Windows: a
+# parent-side watchdog kills the direct child when its working set exceeds it.
+EXECUTOR_MEM_MB = int(os.getenv("CREWML_EXECUTOR_MEM_MB", "3072"))
+
 # Per-dataset wall-clock budget for the Day 4 classical-AutoML ceiling (FLAML).
 # Held >= the crew's per-node executor timeout so beating AutoML is never an
 # artifact of handing the crew more compute (EVAL_PROTOCOL.md §4).
