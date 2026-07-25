@@ -79,7 +79,17 @@ def feature_engineer(state: CrewState) -> dict[str, Any]:
     the contract; otherwise (mock mode, LLM disabled, or a failed generation) it falls
     back to the deterministic default. The chosen source feeds the Trainer.
     """
-    result = run_feature_engineer(state["plan"], state["dataset_key"])
+    # On a Critic-triggered re-entry the FE now sees the latest critique too. Day 10
+    # promised the loop feeds specific instructions back to "Planner/FE" but only the
+    # Planner was wired: the FE regenerated from the plan alone and could re-introduce
+    # the very feature the Critic objected to (a target-derived column is something
+    # only whoever writes the FE code can remove).
+    critiques = state.get("critiques") or []
+    result = run_feature_engineer(
+        state["plan"],
+        state["dataset_key"],
+        critique=critiques[-1] if critiques else None,
+    )
     return {"fe_code": result["code"], "fe_meta": result["meta"], "trace": ["feature_engineer"]}
 
 

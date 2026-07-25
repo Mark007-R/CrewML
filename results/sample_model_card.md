@@ -50,7 +50,18 @@
 - All scores are CROSS-VALIDATED estimates on the train split (cv_score_is_holdout: false); the sealed held-out score is Phase 3.
 - No advisory LLM narrative ran live this run; every decision stands on the deterministic core.
 
-- The executor is a **process-isolation** sandbox, not yet a security sandbox
-  (hardening is Phase 4 / Day 19).
+- The executor runs generated code under a **SandboxPolicy** (Day 19): stdlib +
+  DS-stack import allowlist, no network egress, a filesystem jail, and memory/CPU
+  caps. That is defence-in-depth against careless generated code, **not** a
+  hostile-adversary boundary — true OS-level isolation arrives with the Day-27
+  Docker wrapper.
+- Generated code that **crashes** gets one bounded self-repair pass (Day 20): the
+  traceback goes back to the provider and a repaired run is adopted only if it
+  clears the same acceptance gate. Any repair is disclosed in the warnings above,
+  never applied silently. Timeouts and memory kills are never repaired.
 - "Overfit" signals from the Critic are **cross-validation fold-instability**, not a
   train-vs-held-out gap — the crew cannot see the held-out split by construction.
+
+---
+
+*Sample card captured from the Day-11 end-to-end run. Its measured numbers are that run's; the boilerplate limitations section was re-synced with the Reporter template on Day 20, after the Day-19 sandbox and Day-20 self-repair shipped and made the original wording false.*

@@ -152,9 +152,37 @@ _FE_SYSTEM_PROMPT = textwrap.dedent(
 )
 
 
-def _fe_user_prompt(plan: dict[str, Any]) -> str:
+# Which Critic findings are the Feature Engineer's business. `leak` is the one that
+# most needs FE's attention — the Planner can only re-audit column drops, while an
+# engineered feature derived from the target can only be removed by whoever writes
+# the FE code. `overfit` matters because gratuitous features widen fold variance.
+_FE_RELEVANT_CODES: frozenset[str] = frozenset({"leakage", "overfit", "wrong_metric"})
+
+
+def _critique_directives(critique: Optional[dict[str, Any]]) -> list[str]:
+    """The FE-addressed directives from a critique, newest pass only.
+
+    Reads ``diagnoses`` — the Critic's *structured* findings. Note that
+    ``critique["findings"]`` is a list of pre-rendered **strings** for the Planner,
+    not dicts; reading that key instead raises ``AttributeError`` on a real looped
+    run. Tolerates either shape so a caller passing the structured list directly
+    (as tests do) also works.
+    """
+    if not critique:
+        return []
+    entries = critique.get("diagnoses") or critique.get("findings") or []
+    return [
+        d["directive"]
+        for d in entries
+        if isinstance(d, dict)
+        and d.get("code") in _FE_RELEVANT_CODES
+        and d.get("directive")
+    ]
+
+
+def _fe_user_prompt(plan: dict[str, Any], critique: Optional[dict[str, Any]] = None) -> str:
     pre = plan["preprocessing"]
-    return textwrap.dedent(
+    base = textwrap.dedent(
         f"""\
         Dataset: {plan['dataset_key']} — task {plan['task']} ({plan['subtype']}),
         optimising {plan['metric']}.
@@ -165,6 +193,20 @@ def _fe_user_prompt(plan: dict[str, Any]) -> str:
         Write `add_features(df)` now, adding a few leakage-free, row-wise numeric
         features you judge useful for maximising {plan['metric']} on unseen data of
         this shape. Return only the code.
+        """
+    )
+    # Day 10 promised the Critic's instructions feed back to "Planner/FE", but only
+    # the Planner was ever wired up: on a looped pass the FE regenerated from the
+    # plan alone and could re-introduce the very feature the Critic objected to.
+    directives = _critique_directives(critique)
+    if not directives:
+        return base
+    joined = "\n".join(f"- {d}" for d in directives)
+    return base + textwrap.dedent(
+        f"""
+        A previous pass was CRITIQUED. Address these findings in the features you
+        write this time — do not re-introduce what they object to:
+        {joined}
         """
     )
 
@@ -333,12 +375,14 @@ def _llm_enabled(with_llm: Optional[bool]) -> bool:
     return os.getenv("CREWML_FE_LLM", "1") != "0"
 
 
-def _generate_llm_fe(plan: dict[str, Any]) -> dict[str, Any]:
+def _generate_llm_fe(
+    plan: dict[str, Any], critique: Optional[dict[str, Any]] = None
+) -> dict[str, Any]:
     """Ask the live provider for dataset-specific ``add_features`` code. Never raises."""
     try:
         result = llm.chat(
             _FE_SYSTEM_PROMPT,
-            _fe_user_prompt(plan),
+            _fe_user_prompt(plan, critique),
             temperature=0.0,
             max_tokens=1024,
         )
@@ -362,6 +406,7 @@ def run_feature_engineer(
     *,
     with_llm: Optional[bool] = None,
     self_repair: Optional[bool] = None,
+    critique: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """Produce validated feature-engineering code for ``dataset_key`` from the plan.
 
@@ -381,12 +426,15 @@ def run_feature_engineer(
         "node": "feature_engineer",
         "dataset_key": dataset_key,
         "is_mock": config.is_mock_mode(),
+        # Day 10 promised critiques feed back to the Planner AND the FE; only the
+        # Planner was wired. Record whether this pass actually saw one.
+        "critique_directives": _critique_directives(critique),
     }
 
     use_llm = _llm_enabled(with_llm) and not config.is_mock_mode()
 
     if use_llm:
-        gen = _generate_llm_fe(plan)
+        gen = _generate_llm_fe(plan, critique)
         if gen["ok"]:
             verdict = _validate_fe(gen["code"], dataset_key)
             if verdict["ok"]:
