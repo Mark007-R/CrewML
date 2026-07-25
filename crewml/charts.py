@@ -746,11 +746,23 @@ def plot_self_repair(report: dict, path: Path = SELF_REPAIR_CHART_PATH) -> Path:
     )
     ax_fid.spines[["top", "right"]].set_visible(False)
 
-    fig.suptitle(
-        "CrewML — Day 20 self-repair: crashed generated code reads its own "
-        "traceback and comes back",
-        fontsize=12, fontweight="bold",
-    )
+    # The honesty label travels with the figure: a chart gets separated from its
+    # JSON and its report, and a scripted-mode panel read as a capability result
+    # would be exactly the misreading the study's stamp exists to prevent.
+    if report.get("is_measurement_of_llm_capability", True):
+        fig.suptitle(
+            "CrewML — Day 20 self-repair: crashed generated code reads its own "
+            "traceback and comes back",
+            fontsize=12, fontweight="bold",
+        )
+    else:
+        fig.suptitle(
+            "CrewML — Day 20 self-repair MECHANISM check (deterministic "
+            "stand-in repairer — NOT an LLM measurement)\n"
+            "Injected faults detonate in the real Trainer, the loop fires, the "
+            "sandboxed re-run is adopted. Says nothing about model repair skill.",
+            fontsize=11, fontweight="bold",
+        )
     fig.tight_layout()
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=150, bbox_inches="tight")
