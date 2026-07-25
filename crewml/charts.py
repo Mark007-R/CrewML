@@ -742,13 +742,24 @@ def plot_self_repair(report: dict, path: Path = SELF_REPAIR_CHART_PATH) -> Path:
     # --- Right: score fidelity of recovered runs vs the clean control -------
     recovered = [r for r in injected if r["recovered"]
                  and r["score_fidelity_vs_clean"] is not None]
-    ys, vals, labels = [], [], []
+    ys, vals, labels, colours, hatches = [], [], [], [], []
     for i, r in enumerate(recovered):
         ys.append(i)
         vals.append(r["score_fidelity_vs_clean"])
-        labels.append(f"{r['dataset']}: {r['fault']}")
-    ax_fid.barh(ys, vals, height=0.6,
-                color=[WIN_COLOUR if v >= 0 else LOSS_COLOUR for v in vals])
+        # A fault with no restorable intent CANNOT reproduce the control's feature
+        # set, so its non-zero delta is expected. Drawing it in the loss colour
+        # alongside a "mean |delta| = 0.0" title would read as a contradiction —
+        # and this figure travels separately from the report that explains it.
+        restorable = r.get("restorable", True)
+        labels.append(f"{r['dataset']}: {r['fault']}" + ("" if restorable else " ¹"))
+        colours.append((WIN_COLOUR if vals[-1] >= 0 else LOSS_COLOUR) if restorable
+                       else "#9aa5b4")
+        hatches.append(None if restorable else "//")
+    bars = ax_fid.barh(ys, vals, height=0.6, color=colours)
+    for bar, hatch in zip(bars, hatches):
+        if hatch:
+            bar.set_hatch(hatch)
+            bar.set_edgecolor("#6b7a8f")
     ax_fid.axvline(0, color="#333", lw=0.8)
     ax_fid.set_yticks(ys)
     ax_fid.set_yticklabels(labels, fontsize=7, family="monospace")
@@ -758,11 +769,25 @@ def plot_self_repair(report: dict, path: Path = SELF_REPAIR_CHART_PATH) -> Path:
     span = max(max((abs(v) for v in vals), default=0.0), 0.001)
     ax_fid.set_xlim(-span * 1.6, span * 1.6)
     ax_fid.set_xlabel("repaired CV score − clean CV score", fontsize=8)
+    n_scored = report.get("n_fidelity_scored")
+    scope = f" over {n_scored} restorable" if n_scored is not None else ""
+    subtitle = (
+        f"mean |Δ| = {report['mean_abs_score_fidelity']}{scope}"
+        if report.get("mean_abs_score_fidelity") is not None
+        else "no restorable runs scored"
+    )
     ax_fid.set_title(
-        f"Score fidelity of repaired runs\n(mean |Δ| = "
-        f"{report['mean_abs_score_fidelity']})",
+        f"Score fidelity of repaired runs\n({subtitle})",
         fontsize=10, fontweight="bold",
     )
+    if any(not r.get("restorable", True) for r in recovered):
+        ax_fid.text(
+            0.5, -0.14,
+            "¹ no restorable intent — a non-zero Δ is EXPECTED here and is excluded "
+            "from the mean",
+            transform=ax_fid.transAxes, ha="center", va="top", fontsize=7,
+            color="#6b7a8f",
+        )
     ax_fid.spines[["top", "right"]].set_visible(False)
 
     # The honesty label travels with the figure: a chart gets separated from its
