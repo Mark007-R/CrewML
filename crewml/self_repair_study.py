@@ -192,6 +192,27 @@ FAULTS: tuple[dict[str, str], ...] = (
             """
         ),
     },
+    # The only fault in this suite that is NOT invented. On a live Phase-3 run
+    # (diabetes) the Feature Engineer's generated code built an unguarded ratio
+    # that produced +/-inf; FE validation passed it (its nan check does not test
+    # finiteness), and training died at sklearn's finite assertion. That is the
+    # crew's one real fatal failure to date and the motivating case for this
+    # whole day, so the measurement would be hollow without it. Verified to
+    # reproduce the same ValueError("Input X contains infinity ...").
+    {
+        "key": "non_finite",
+        "taxonomy": "exec_error",
+        "description": "unguarded ratio emits +/-inf — the crew's one REAL live crash",
+        "source": _fe_module(
+            """\
+            out = df.copy()
+            num = df.select_dtypes(include="number")
+            col = num.columns[0]
+            out["unguarded_ratio"] = df[col] / (df[col] - df[col])
+            return out
+            """
+        ),
+    },
 )
 
 
@@ -290,15 +311,41 @@ def scripted_repairer():
     return chat
 
 
+# --- Which faults have a RESTORABLE intent (fidelity's scope) ----------------
+#
+# Score fidelity compares a repaired run against the clean control, whose FE is
+# DEFAULT_FE_SOURCE. Most faults here are "the default FE plus one planted bug",
+# so the only sensible fix converges back on the default FE and Δ == 0 is very
+# nearly forced — which makes Δ == 0 a useful *regression* check (the repair did
+# not wander off) but NOT independent evidence that the loop "restored" anything.
+#
+# Two faults have no restorable intent at all:
+#   * key_error   — indexes a column that does not exist, so there is no original
+#                   feature to rebuild; any fix must invent something else.
+#   * non_finite  — an unguarded ratio; correctly guarding it yields a genuinely
+#                   different (and legitimate) feature, not the default's.
+# For those, Δ != 0 is the EXPECTED outcome and must never be read as misbehaviour.
+# Reporting one mean over both groups would blur exactly that distinction, so the
+# summary scopes fidelity to the restorable faults and lists the others.
+NON_RESTORABLE_FAULTS: frozenset[str] = frozenset({"key_error", "non_finite"})
+
+
 def _plan_for(key: str) -> dict[str, Any]:
     """The deterministic plan core — no LLM tokens spent on planning here."""
     return build_plan(build_profile(REGISTRY[key], load_train(key)))
 
 
 def _fe_artifact_consistent(training: dict[str, Any]) -> Optional[bool]:
-    """Does the run's persisted ``fe_source.py`` still hold a compilable
-    ``add_features``? A repair that fixes the live function but ships a stale
-    broken artifact would sabotage later holdout scoring — this catches it."""
+    """Is the run's persisted ``fe_source.py`` WELL-FORMED — parses and defines
+    ``add_features``?
+
+    Honesty note: despite the name this is a well-formedness check, **not** proof
+    that the artifact matches the feature engineering the shipped model was fitted
+    with. It catches the realistic corruption (a repair that ships a stale or
+    unparseable artifact and thereby sabotages later holdout scoring); it cannot
+    catch an artifact that is valid Python but describes different features.
+    Reported as "FE-artifact malformed" for that reason.
+    """
     if not training.get("ok") or not training.get("run_id"):
         return None
     art = ARTIFACTS_DIR / "executor" / training["run_id"] / "artifacts" / "fe_source.py"
@@ -333,11 +380,31 @@ def _run_record(
         "recovered_on_attempt": repair.get("recovered_on_attempt"),
         "attempts_used": len(repair.get("attempts") or []),
         "attempt_errors": [
-            {"attempt": a.get("attempt"), "stage": a.get("stage"), "ok": a.get("ok")}
+            {
+                "attempt": a.get("attempt"),
+                "stage": a.get("stage"),
+                "ok": a.get("ok"),
+                # Keep the reason, truncated. Without it a provider failure is
+                # indistinguishable from a model failure in the committed record —
+                # which is how a rate limit gets published as a 0% recovery rate.
+                "error": (a.get("error") or "")[:240] or None,
+            }
             for a in (repair.get("attempts") or [])
         ],
+        # True when repair was attempted, did not recover, and EVERY attempt died
+        # at the llm stage — i.e. the model was never actually consulted. Such a
+        # run is UNMEASURED, not a failure to repair.
+        "llm_unavailable": bool(
+            repair.get("attempted")
+            and not repair.get("recovered")
+            and (repair.get("attempts") or [])
+            and all(a.get("stage") == "llm" for a in repair["attempts"])
+        ),
         "cv_score": score,
         "score_fidelity_vs_clean": fidelity,
+        # False => a correct fix CANNOT reproduce the control's FE, so a non-zero
+        # fidelity is expected here and is not evidence of a bad repair.
+        "restorable": bool(fault is None or fault["key"] not in NON_RESTORABLE_FAULTS),
         "fe_artifact_consistent": _fe_artifact_consistent(training),
         "prompt_tokens": int(repair.get("total_prompt_tokens") or 0),
         "completion_tokens": int(repair.get("total_completion_tokens") or 0),
@@ -375,6 +442,17 @@ def run_self_repair_study(
     """
     if repairer not in ("live", "scripted"):
         raise ValueError(f"unknown repairer {repairer!r}; use 'live' or 'scripted'")
+    # Refuse an empty matrix up front. Otherwise the pass "succeeds" with nothing
+    # injected, overwrites the committed results JSON with a contentless report,
+    # and only then crashes formatting a None rate — losing a real measurement to
+    # a typo in --faults.
+    if not datasets:
+        raise ValueError("no datasets selected — nothing to measure")
+    if not faults:
+        raise ValueError(
+            "no faults selected — check --faults against "
+            f"{sorted(f['key'] for f in FAULTS)}"
+        )
 
     if repairer == "live":
         if is_mock_mode():
@@ -453,10 +531,26 @@ def _execute_study(
     injected = [r for r in runs if r["fault"] != "none_control"]
     controls = [r for r in runs if r["fault"] == "none_control"]
     recovered = [r for r in injected if r["recovered"]]
+    # A run whose repair never reached the model measures the provider's quota,
+    # not the loop. Exclude those from the denominator instead of scoring them as
+    # failures — on 2026-07-25 a mid-run Groq daily-token exhaustion turned an
+    # entire 18-run pass into a spurious "recovery rate 0%".
+    unmeasured = [r for r in injected if r["llm_unavailable"]]
+    measurable = [r for r in injected if not r["llm_unavailable"]]
+    measurable_recovered = [r for r in measurable if r["recovered"]]
+    # Scope fidelity to faults whose intent a correct fix CAN restore (see
+    # NON_RESTORABLE_FAULTS). Averaging the two groups together would hide the
+    # only distinction that makes the metric meaningful.
     fidelity_vals = [
         abs(r["score_fidelity_vs_clean"])
         for r in recovered
-        if r["score_fidelity_vs_clean"] is not None
+        if r["score_fidelity_vs_clean"] is not None and r["restorable"]
+    ]
+    non_restorable_observed = [
+        {"dataset": r["dataset"], "fault": r["fault"],
+         "delta": r["score_fidelity_vs_clean"]}
+        for r in recovered
+        if not r["restorable"] and r["score_fidelity_vs_clean"] is not None
     ]
 
     scripted = repairer == "scripted"
@@ -483,20 +577,52 @@ def _execute_study(
             if scripted
             else (GROQ_MODEL if LLM_PROVIDER == "groq" else None)
         ),
-        "is_mock": False,
+        # EVAL_PROTOCOL §5: a result produced without a live LLM IS mock and must
+        # be labelled so. Scripted mode contacts no provider at all, so hard-coding
+        # False here would have mislabelled it for every generic consumer.
+        "is_mock": bool(scripted or is_mock_mode()),
         "max_attempts": SELF_REPAIR_MAX_ATTEMPTS,
         "datasets": list(datasets),
         "n_faults": len(faults),
         "n_injected_runs": len(injected),
-        "recovery_rate": round(len(recovered) / len(injected), 4) if injected else None,
-        "recovered_runs": len(recovered),
+        # Rate over MEASURABLE runs only, and None when nothing was measurable —
+        # never a number manufactured from provider failures.
+        "recovery_rate": (
+            round(len(measurable_recovered) / len(measurable), 4) if measurable else None
+        ),
+        "recovered_runs": len(measurable_recovered),
+        "measurable_runs": len(measurable),
+        "unmeasured_runs": len(unmeasured),
+        "unmeasured_faults": sorted({r["fault"] for r in unmeasured}),
+        # Loud, machine-checkable verdict for every downstream consumer.
+        "measurement_valid": len(measurable) > 0,
+        "measurement_caveat": (
+            None
+            if not unmeasured
+            else (
+                f"{len(unmeasured)} of {len(injected)} injected runs never reached "
+                "the provider (all repair attempts failed at the llm stage — e.g. a "
+                "rate limit or outage). Those runs are UNMEASURED, excluded from the "
+                "recovery-rate denominator, and must not be read as failures to repair."
+            )
+        ),
         "first_attempt_recoveries": sum(
-            1 for r in recovered if r["recovered_on_attempt"] == 1
+            1 for r in measurable_recovered if r["recovered_on_attempt"] == 1
         ),
         "mean_abs_score_fidelity": (
             round(sum(fidelity_vals) / len(fidelity_vals), 6) if fidelity_vals else None
         ),
         "max_abs_score_fidelity": round(max(fidelity_vals), 6) if fidelity_vals else None,
+        "fidelity_scope": (
+            "restorable faults only — for these the only sensible fix converges on "
+            "the control's FE, so |delta| ~ 0 is a REGRESSION check (the repair did "
+            "not wander), not independent proof of restoration. Faults with no "
+            "restorable intent are listed under non_restorable_deltas, where a "
+            "non-zero delta is the expected outcome."
+        ),
+        "n_fidelity_scored": len(fidelity_vals),
+        "non_restorable_faults": sorted(NON_RESTORABLE_FAULTS),
+        "non_restorable_deltas": non_restorable_observed,
         "false_positive_repairs_on_clean": sum(
             1 for r in controls if r["repair_attempted"]
         ),
@@ -531,14 +657,24 @@ def render_table_md(report: dict[str, Any]) -> str:
             "deferred until a provider is live.",
             "",
         ]
+    if report.get("measurement_caveat"):
+        lines += [f"> **PARTIALLY UNMEASURED.** {report['measurement_caveat']}", ""]
+    rate = (
+        f"**{report['recovered_runs']}/{report.get('measurable_runs', report['n_injected_runs'])}"
+        f" = {report['recovery_rate']:.0%}**"
+        if report.get("recovery_rate") is not None
+        else "**not measurable** (no injected run reached the provider)"
+    )
     lines += [
         f"Repairer: **{report['provider']}** ({report['model']}) · "
         f"attempt budget: {report['max_attempts']} · "
-        f"{rate_label}: **{report['recovered_runs']}/{report['n_injected_runs']} "
-        f"= {report['recovery_rate']:.0%}** · "
+        f"{rate_label}: {rate} · "
         f"false-positive repairs on clean runs: "
         f"{report['false_positive_repairs_on_clean']} · "
-        f"FE-artifact inconsistencies: {report['fe_artifact_inconsistencies']} · "
+        # Deliberately "malformed", not "inconsistent": the check parses the
+        # artifact and looks for add_features. It does NOT prove the artifact
+        # matches the FE the model was fitted with, and must not imply it.
+        f"FE-artifact malformed: {report['fe_artifact_inconsistencies']} · "
         f"holdout seal intact: {report['holdout_seal_intact']}",
         "",
         "| Dataset | Fault | Recovered | Attempt | CV after | Δ vs clean | Tokens | Wall s |",
@@ -556,13 +692,26 @@ def render_table_md(report: dict[str, Any]) -> str:
             rec = "n/a (control)"
         elif r["recovered"]:
             rec = "yes"
+        elif r.get("llm_unavailable"):
+            rec = "unmeasured (provider)"
         else:
             rec = "NO"
+        if fid != "—" and not r.get("restorable", True):
+            fid += " ¹"      # expected to differ; see the footnote
         lines.append(
             f"| {r['dataset']} | {r['fault']} | {rec} | "
             f"{r['recovered_on_attempt'] or '—'} | {cv} | {fid} | {tokens} | {r['wall_s']} |"
         )
     lines.append("")
+    if any(not r.get("restorable", True) for r in report["runs"]):
+        lines += [
+            "¹ This fault has **no restorable intent** (it references a column that "
+            "does not exist, or a ratio that must be guarded differently), so a "
+            "correct fix cannot reproduce the control's feature set. A non-zero Δ "
+            "here is EXPECTED and is not evidence of a bad repair. Fidelity "
+            "statistics are scoped to the restorable faults.",
+            "",
+        ]
     return "\n".join(lines)
 
 

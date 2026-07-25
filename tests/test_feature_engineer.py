@@ -157,3 +157,71 @@ def test_source_never_loads_the_holdout():
     src = inspect.getsource(fe)
     assert "load_holdout" not in src
     assert "holdout_path" not in src
+
+
+# --- Finiteness gate (added Day 20 — closes the one real fatal live failure) --
+#
+# A live Phase-3 run lost a whole dataset because generated FE code built an
+# unguarded ratio that produced +/-inf: SimpleImputer runs with
+# force_all_finite="allow-nan", so it replaced NaN but passed inf through to
+# sklearn's finite assertion, which killed the fit. The old check here was a nan
+# check misleadingly named `all_finite_ok`, so infinity was never screened.
+
+_INF_FE = """\
+import pandas as pd
+
+
+def add_features(df):
+    out = df.copy()
+    num = df.select_dtypes(include="number")
+    col = num.columns[0]
+    out["unguarded_ratio"] = df[col] / (df[col] - df[col])
+    return out
+"""
+
+_NAN_FE = """\
+import pandas as pd
+import numpy as np
+
+
+def add_features(df):
+    out = df.copy()
+    num = df.select_dtypes(include="number")
+    col = num.columns[0]
+    keep = df[col].copy().astype("float64")
+    keep.iloc[0] = np.nan          # NaN must stay acceptable — imputers handle it
+    out["mostly_present"] = keep
+    return out
+"""
+
+
+def test_infinite_engineered_column_fails_validation():
+    verdict = fe._validate_fe(_INF_FE, KEY)
+    assert verdict["executed_ok"] is True      # the code RUNS; that was the trap
+    assert verdict["no_infinities"] is False
+    assert verdict["ok"] is False              # ...but must not be trusted
+    assert "unguarded_ratio" in verdict["infinite_columns"]
+
+
+def test_nan_engineered_column_still_passes_validation():
+    verdict = fe._validate_fe(_NAN_FE, KEY)
+    assert verdict["no_infinities"] is True
+    assert verdict["ok"] is True
+
+
+def test_infinite_generated_code_is_rejected_and_falls_back(monkeypatch):
+    monkeypatch.setattr(config, "is_mock_mode", lambda: False)
+    monkeypatch.setattr(llm, "chat", _fake_llm(_INF_FE))
+    out = run_feature_engineer(_plan(), KEY, with_llm=True, self_repair=False)
+    assert out["meta"]["source"] == "fallback"
+    assert out["meta"]["llm_validation"]["no_infinities"] is False
+    assert out["code"] == DEFAULT_FE_SOURCE
+
+
+def test_repair_prompt_names_the_offending_infinite_columns():
+    """The self-repair loop can only fix what the error text tells it."""
+    verdict = fe._validate_fe(_INF_FE, KEY)
+    message = fe._verdict_error(verdict)
+    assert "no_infinities=False" in message
+    assert "unguarded_ratio" in message
+    assert "safe denominator" in message

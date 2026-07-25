@@ -1,11 +1,11 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "study": "day20_self_repair",
-  "repairer": "scripted",
-  "is_measurement_of_llm_capability": false,
-  "repairer_note": "DETERMINISTIC STAND-IN, NOT AN LLM: a fixed fault-blind policy (strip sandbox-refused imports; restore add_features to the contract-minimal implementation). Measures the mechanism \u2014 fault detonation, loop firing, sandboxed re-run adoption, score fidelity, artifact consistency. Says nothing about model repair skill.",
-  "provider": "scripted_stand_in",
-  "model": "deterministic-repair-policy",
+  "repairer": "live",
+  "is_measurement_of_llm_capability": true,
+  "repairer_note": "Live provider performed every repair.",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile",
   "is_mock": false,
   "max_attempts": 2,
   "datasets": [
@@ -21,9 +21,9 @@
   "max_abs_score_fidelity": 0.0,
   "false_positive_repairs_on_clean": 0,
   "fe_artifact_inconsistencies": 0,
-  "total_prompt_tokens": 0,
-  "total_completion_tokens": 0,
-  "total_wall_s": 286.4,
+  "total_prompt_tokens": 44739,
+  "total_completion_tokens": 35381,
+  "total_wall_s": 500.5,
   "clean_scores": {
     "credit-g": 0.794048,
     "cpu_small": 0.977309
@@ -45,7 +45,9 @@
       "fe_artifact_consistent": true,
       "prompt_tokens": 0,
       "completion_tokens": 0,
-      "wall_s": 11.3
+      "wall_s": 12.6,
+      "llm_unavailable": false,
+      "restorable": true
     },
     {
       "dataset": "credit-g",
@@ -61,15 +63,18 @@
         {
           "attempt": 1,
           "stage": null,
-          "ok": true
+          "ok": true,
+          "error": null
         }
       ],
       "cv_score": 0.794048,
       "score_fidelity_vs_clean": 0.0,
       "fe_artifact_consistent": true,
-      "prompt_tokens": 0,
-      "completion_tokens": 0,
-      "wall_s": 15.0
+      "prompt_tokens": 2776,
+      "completion_tokens": 2232,
+      "wall_s": 21.7,
+      "llm_unavailable": false,
+      "restorable": true
     },
     {
       "dataset": "credit-g",
@@ -85,15 +90,18 @@
         {
           "attempt": 1,
           "stage": null,
-          "ok": true
+          "ok": true,
+          "error": null
         }
       ],
-      "cv_score": 0.794048,
-      "score_fidelity_vs_clean": 0.0,
+      "cv_score": 0.787165,
+      "score_fidelity_vs_clean": -0.006883,
       "fe_artifact_consistent": true,
-      "prompt_tokens": 0,
-      "completion_tokens": 0,
-      "wall_s": 14.3
+      "prompt_tokens": 2826,
+      "completion_tokens": 2238,
+      "wall_s": 39.5,
+      "llm_unavailable": false,
+      "restorable": false
     },
     {
       "dataset": "credit-g",
@@ -109,15 +117,18 @@
         {
           "attempt": 1,
           "stage": null,
-          "ok": true
+          "ok": true,
+          "error": null
         }
       ],
       "cv_score": 0.794048,
       "score_fidelity_vs_clean": 0.0,
       "fe_artifact_consistent": true,
-      "prompt_tokens": 0,
-      "completion_tokens": 0,
-      "wall_s": 14.6
+      "prompt_tokens": 2865,
+      "completion_tokens": 2234,
+      "wall_s": 27.6,
+      "llm_unavailable": false,
+      "restorable": true
     },
     {
       "dataset": "credit-g",
@@ -133,15 +144,18 @@
         {
           "attempt": 1,
           "stage": null,
-          "ok": true
+          "ok": true,
+          "error": null
         }
       ],
       "cv_score": 0.794048,
       "score_fidelity_vs_clean": 0.0,
       "fe_artifact_consistent": true,
-      "prompt_tokens": 0,
-      "completion_tokens": 0,
-      "wall_s": 12.7
+      "prompt_tokens": 2800,
+      "completion_tokens": 2232,
+      "wall_s": 29.2,
+      "llm_unavailable": false,
+      "restorable": true
     },
     {
       "dataset": "credit-g",
@@ -157,15 +171,18 @@
         {
           "attempt": 1,
           "stage": null,
-          "ok": true
+          "ok": true,
+          "error": null
         }
       ],
       "cv_score": 0.794048,
       "score_fidelity_vs_clean": 0.0,
       "fe_artifact_consistent": true,
-      "prompt_tokens": 0,
-      "completion_tokens": 0,
-      "wall_s": 13.4
+      "prompt_tokens": 2772,
+      "completion_tokens": 2251,
+      "wall_s": 22.8,
+      "llm_unavailable": false,
+      "restorable": true
     },
     {
       "dataset": "credit-g",
@@ -181,15 +198,18 @@
         {
           "attempt": 1,
           "stage": null,
-          "ok": true
+          "ok": true,
+          "error": null
         }
       ],
       "cv_score": 0.794048,
       "score_fidelity_vs_clean": 0.0,
       "fe_artifact_consistent": true,
-      "prompt_tokens": 0,
-      "completion_tokens": 0,
-      "wall_s": 13.8
+      "prompt_tokens": 2808,
+      "completion_tokens": 2226,
+      "wall_s": 25.6,
+      "llm_unavailable": false,
+      "restorable": true
     },
     {
       "dataset": "credit-g",
@@ -205,15 +225,18 @@
         {
           "attempt": 1,
           "stage": null,
-          "ok": true
+          "ok": true,
+          "error": null
         }
       ],
       "cv_score": 0.794048,
       "score_fidelity_vs_clean": 0.0,
       "fe_artifact_consistent": true,
-      "prompt_tokens": 0,
-      "completion_tokens": 0,
-      "wall_s": 14.2
+      "prompt_tokens": 2817,
+      "completion_tokens": 2234,
+      "wall_s": 25.5,
+      "llm_unavailable": false,
+      "restorable": true
     },
     {
       "dataset": "credit-g",
@@ -229,15 +252,18 @@
         {
           "attempt": 1,
           "stage": null,
-          "ok": true
+          "ok": true,
+          "error": null
         }
       ],
       "cv_score": 0.794048,
       "score_fidelity_vs_clean": 0.0,
       "fe_artifact_consistent": true,
-      "prompt_tokens": 0,
-      "completion_tokens": 0,
-      "wall_s": 15.6
+      "prompt_tokens": 2877,
+      "completion_tokens": 2226,
+      "wall_s": 25.5,
+      "llm_unavailable": false,
+      "restorable": true
     },
     {
       "dataset": "cpu_small",
@@ -255,7 +281,9 @@
       "fe_artifact_consistent": true,
       "prompt_tokens": 0,
       "completion_tokens": 0,
-      "wall_s": 16.0
+      "wall_s": 21.4,
+      "llm_unavailable": false,
+      "restorable": true
     },
     {
       "dataset": "cpu_small",
@@ -271,15 +299,18 @@
         {
           "attempt": 1,
           "stage": null,
-          "ok": true
+          "ok": true,
+          "error": null
         }
       ],
       "cv_score": 0.977309,
       "score_fidelity_vs_clean": 0.0,
       "fe_artifact_consistent": true,
-      "prompt_tokens": 0,
-      "completion_tokens": 0,
-      "wall_s": 19.4
+      "prompt_tokens": 2733,
+      "completion_tokens": 2189,
+      "wall_s": 31.3,
+      "llm_unavailable": false,
+      "restorable": true
     },
     {
       "dataset": "cpu_small",
@@ -295,15 +326,18 @@
         {
           "attempt": 1,
           "stage": null,
-          "ok": true
+          "ok": true,
+          "error": null
         }
       ],
       "cv_score": 0.977309,
       "score_fidelity_vs_clean": 0.0,
       "fe_artifact_consistent": true,
-      "prompt_tokens": 0,
-      "completion_tokens": 0,
-      "wall_s": 19.7
+      "prompt_tokens": 2783,
+      "completion_tokens": 2195,
+      "wall_s": 26.0,
+      "llm_unavailable": false,
+      "restorable": false
     },
     {
       "dataset": "cpu_small",
@@ -319,15 +353,18 @@
         {
           "attempt": 1,
           "stage": null,
-          "ok": true
+          "ok": true,
+          "error": null
         }
       ],
       "cv_score": 0.977309,
       "score_fidelity_vs_clean": 0.0,
       "fe_artifact_consistent": true,
-      "prompt_tokens": 0,
-      "completion_tokens": 0,
-      "wall_s": 18.8
+      "prompt_tokens": 2822,
+      "completion_tokens": 2183,
+      "wall_s": 33.3,
+      "llm_unavailable": false,
+      "restorable": true
     },
     {
       "dataset": "cpu_small",
@@ -343,15 +380,18 @@
         {
           "attempt": 1,
           "stage": null,
-          "ok": true
+          "ok": true,
+          "error": null
         }
       ],
       "cv_score": 0.977309,
       "score_fidelity_vs_clean": 0.0,
       "fe_artifact_consistent": true,
-      "prompt_tokens": 0,
-      "completion_tokens": 0,
-      "wall_s": 16.0
+      "prompt_tokens": 2757,
+      "completion_tokens": 2189,
+      "wall_s": 23.0,
+      "llm_unavailable": false,
+      "restorable": true
     },
     {
       "dataset": "cpu_small",
@@ -367,15 +407,18 @@
         {
           "attempt": 1,
           "stage": null,
-          "ok": true
+          "ok": true,
+          "error": null
         }
       ],
       "cv_score": 0.977309,
       "score_fidelity_vs_clean": 0.0,
       "fe_artifact_consistent": true,
-      "prompt_tokens": 0,
-      "completion_tokens": 0,
-      "wall_s": 18.7
+      "prompt_tokens": 2729,
+      "completion_tokens": 2196,
+      "wall_s": 26.7,
+      "llm_unavailable": false,
+      "restorable": true
     },
     {
       "dataset": "cpu_small",
@@ -391,15 +434,18 @@
         {
           "attempt": 1,
           "stage": null,
-          "ok": true
+          "ok": true,
+          "error": null
         }
       ],
       "cv_score": 0.977309,
       "score_fidelity_vs_clean": 0.0,
       "fe_artifact_consistent": true,
-      "prompt_tokens": 0,
-      "completion_tokens": 0,
-      "wall_s": 18.0
+      "prompt_tokens": 2766,
+      "completion_tokens": 2182,
+      "wall_s": 34.1,
+      "llm_unavailable": false,
+      "restorable": true
     },
     {
       "dataset": "cpu_small",
@@ -415,15 +461,18 @@
         {
           "attempt": 1,
           "stage": null,
-          "ok": true
+          "ok": true,
+          "error": null
         }
       ],
       "cv_score": 0.977309,
       "score_fidelity_vs_clean": 0.0,
       "fe_artifact_consistent": true,
-      "prompt_tokens": 0,
-      "completion_tokens": 0,
-      "wall_s": 17.7
+      "prompt_tokens": 2774,
+      "completion_tokens": 2191,
+      "wall_s": 26.2,
+      "llm_unavailable": false,
+      "restorable": true
     },
     {
       "dataset": "cpu_small",
@@ -439,16 +488,43 @@
         {
           "attempt": 1,
           "stage": null,
-          "ok": true
+          "ok": true,
+          "error": null
         }
       ],
       "cv_score": 0.977309,
       "score_fidelity_vs_clean": 0.0,
       "fe_artifact_consistent": true,
-      "prompt_tokens": 0,
-      "completion_tokens": 0,
-      "wall_s": 17.2
+      "prompt_tokens": 2834,
+      "completion_tokens": 2183,
+      "wall_s": 48.5,
+      "llm_unavailable": false,
+      "restorable": true
     }
   ],
-  "holdout_seal_intact": true
+  "holdout_seal_intact": true,
+  "measurable_runs": 16,
+  "unmeasured_runs": 0,
+  "unmeasured_faults": [],
+  "measurement_valid": true,
+  "measurement_caveat": null,
+  "run_note": "Live run 1 of 2 on 2026-07-25, 8 injected faults x 2 datasets. This is the committed live measurement. A second run adding the non_finite fault was invalidated by Groq daily-token exhaustion (100k TPD) and is kept only at artifacts/day20_live2_INVALID_ratelimited.json; the non_finite fault is therefore ADDED and verified to detonate, but its live repair is UNMEASURED.",
+  "n_fidelity_scored": 14,
+  "non_restorable_faults": [
+    "key_error",
+    "non_finite"
+  ],
+  "non_restorable_deltas": [
+    {
+      "dataset": "credit-g",
+      "fault": "key_error",
+      "delta": -0.006883
+    },
+    {
+      "dataset": "cpu_small",
+      "fault": "key_error",
+      "delta": 0.0
+    }
+  ],
+  "fidelity_scope": "restorable faults only \u2014 for these the only sensible fix converges on the control's FE, so |delta| ~ 0 is a REGRESSION check (the repair did not wander), not independent proof of restoration. Faults with no restorable intent are listed under non_restorable_deltas, where a non-zero delta is the expected outcome."
 }

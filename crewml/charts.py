@@ -702,9 +702,21 @@ def plot_self_repair(report: dict, path: Path = SELF_REPAIR_CHART_PATH) -> Path:
             attempt = r["recovered_on_attempt"] if r["recovered"] else None
             y = i + (j - (len(datasets) - 1) / 2) * bar_h
             width = attempt if attempt else report["max_attempts"]
-            ax_rec.barh(y, width, height=bar_h * 0.9,
-                        color=REPAIR_COLOURS.get(attempt, REPAIR_COLOURS[None]))
-            label = f"attempt {attempt}" if attempt else "NOT recovered"
+            unmeasured = bool(r.get("llm_unavailable"))
+            # Hatched grey, never the failure colour: a run the provider refused is
+            # not evidence about the loop, and must not read as one on the chart.
+            ax_rec.barh(
+                y, width, height=bar_h * 0.9,
+                color="#c9ced6" if unmeasured else REPAIR_COLOURS.get(attempt, REPAIR_COLOURS[None]),
+                hatch="//" if unmeasured else None,
+                edgecolor="#6b7a8f" if unmeasured else None,
+            )
+            if unmeasured:
+                label = "UNMEASURED (provider)"
+            elif attempt:
+                label = f"attempt {attempt}"
+            else:
+                label = "NOT recovered"
             ax_rec.text(width + 0.05, y, f"{ds}: {label}", va="center", fontsize=7)
     ax_rec.set_yticks(range(len(faults)))
     ax_rec.set_yticklabels(faults, fontsize=8, family="monospace")
@@ -713,10 +725,17 @@ def plot_self_repair(report: dict, path: Path = SELF_REPAIR_CHART_PATH) -> Path:
     ax_rec.set_xticks(range(0, report["max_attempts"] + 1))
     ax_rec.set_xlabel("repair attempts consumed", fontsize=8)
     rate = report["recovery_rate"]
+    denom = report.get("measurable_runs", report["n_injected_runs"])
+    rate_text = (
+        f"rate {report['recovered_runs']}/{denom} = {rate:.0%}"
+        if rate is not None
+        else "rate NOT MEASURABLE"
+    )
+    unmeasured_n = report.get("unmeasured_runs", 0)
+    if unmeasured_n:
+        rate_text += f" · {unmeasured_n} unmeasured"
     ax_rec.set_title(
-        f"Recovery per injected fault — rate {report['recovered_runs']}"
-        f"/{report['n_injected_runs']} = {rate:.0%}",
-        fontsize=10, fontweight="bold",
+        f"Recovery per injected fault — {rate_text}", fontsize=10, fontweight="bold",
     )
     ax_rec.spines[["top", "right"]].set_visible(False)
 

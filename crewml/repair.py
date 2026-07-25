@@ -40,7 +40,10 @@ Safety posture (the loop must not weaken Day 19):
   as the new traceback, not executed.
 * **Bounded.** ``CREWML_SELF_REPAIR_MAX_ATTEMPTS`` (default 2) caps the loop;
   timeouts and memory kills are *not* repairable (rewriting code cannot be
-  trusted to fix a resource exhaustion, and retrying one doubles the bill).
+  trusted to fix a resource exhaustion, and retrying one doubles the bill). That
+  rule is enforced on the loop's *own* re-runs as well, via
+  ``not_repairable_fn`` — a candidate whose run blows the clock or the memory cap
+  stops the loop instead of earning another attempt.
 * **Honest in mock mode.** Without a live provider there is no repair — the
   loop records ``attempted: False, reason: "mock_mode"`` rather than pretending.
 
@@ -51,11 +54,32 @@ asserting it.
 from __future__ import annotations
 
 import os
+import re
 from typing import Any, Callable, Optional
 
 from crewml import config, llm
 
 REPAIR_SCHEMA_VERSION = 1
+
+# Provider error text is recorded (a rate limit must stay distinguishable from a
+# model that could not fix the bug) and those records are COMMITTED to a public
+# repo, so scrub identifiers first. Groq's 429 body, for instance, names the
+# organization id. None of these are credentials, but none of them need to ship.
+_SENSITIVE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\borg_[A-Za-z0-9]{8,}"),
+    re.compile(r"\bgsk_[A-Za-z0-9]{8,}"),
+    re.compile(r"\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{8,}"),
+    re.compile(r"\bBearer\s+[A-Za-z0-9._-]{8,}", re.IGNORECASE),
+)
+
+
+def scrub(text: Optional[str]) -> Optional[str]:
+    """Redact provider/account identifiers from text destined for a record."""
+    if not text:
+        return text
+    for pattern in _SENSITIVE_PATTERNS:
+        text = pattern.sub("[redacted]", text)
+    return text
 
 # Substrings a repaired source may never contain — anything that names a way to
 # LOAD the held-out split is disqualifying even though the executor could not
@@ -163,6 +187,7 @@ def repair_loop(
     context: str,
     max_attempts: Optional[int] = None,
     max_tokens: int = 6000,
+    not_repairable_fn: Optional[Callable[[Any], bool]] = None,
 ) -> dict[str, Any]:
     """Ask the live provider to fix ``code`` given ``error``; re-run; iterate.
 
@@ -223,8 +248,12 @@ def repair_loop(
                 max_tokens=max_tokens,
             )
         except Exception as exc:  # provider down/rate-limited — record, stop
-            entry.update(stage="llm", error=f"{type(exc).__name__}: {exc}")
+            entry.update(stage="llm", error=scrub(f"{type(exc).__name__}: {exc}"))
             record["attempts"].append(entry)
+            # Explicit, machine-checkable: the model was never consulted, so this
+            # record is NOT evidence that repair failed. Consumers computing a
+            # recovery rate must exclude it (see crewml.self_repair_study).
+            record["provider_unavailable"] = True
             break
 
         entry.update(
@@ -239,18 +268,30 @@ def repair_loop(
         candidate = llm.extract_python(reply.text)
         guard_reason = _static_guard(candidate)
         if guard_reason is not None:
-            # A non-compiling candidate becomes the next attempt's subject — the
-            # model is shown its own broken fix. Forbidden-token/size rejections
-            # keep the previous subject (adopting such a candidate is unsafe).
             entry.update(stage="guard", error=guard_reason)
             record["attempts"].append(entry)
             if guard_reason.startswith("candidate does not compile"):
+                # Show the model its own broken fix — that is new information.
                 current_code, current_error = candidate, guard_reason
+            else:
+                # Forbidden-token / oversize rejections must NOT adopt the
+                # candidate (unsafe, and possibly not even a module). But the
+                # subject must still change, or the next attempt re-sends a
+                # byte-identical prompt at temperature 0 and gets the identical
+                # rejected reply — silently burning the whole budget. Keep the
+                # original subject and append the rejection so the retry is
+                # actually informed.
+                current_error = (
+                    f"{current_error}\n\n[Your previous fix was REJECTED without "
+                    f"being run: {guard_reason}. Do not reference held-out/test "
+                    "data, and return only the corrected module.]"
+                )
             continue
 
         ok, run_error, payload = run_fn(candidate)
         if ok:
             entry["ok"] = True
+            entry["stage"] = "run"      # schema-uniform with the failure entries
             record["attempts"].append(entry)
             record.update(
                 recovered=True,
@@ -262,6 +303,16 @@ def repair_loop(
 
         entry.update(stage="run", error=_error_tail(run_error or "run failed"))
         record["attempts"].append(entry)
+
+        # "Timeouts and OOM kills are never repaired" has to hold for EVERY
+        # failure, not just the first one the caller screened. If a candidate's
+        # own run exhausts the clock or the memory cap, stop: rewriting code is
+        # not a credible fix for resource exhaustion, and each further attempt
+        # re-spends the full budget.
+        if not_repairable_fn is not None and not_repairable_fn(payload):
+            record["stopped_early"] = "candidate_run_hit_resource_limit"
+            break
+
         current_code, current_error = candidate, run_error or "run failed"
 
     return record

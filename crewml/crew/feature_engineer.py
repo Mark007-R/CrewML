@@ -177,6 +177,7 @@ _VALIDATION_HARNESS = textwrap.dedent(
     add_features() to the TRAIN feature frame and reports whether it honours the
     contract. Never scores anything; never touches the held-out split.
     """
+    import numpy as np
     import pandas as pd
     from pandas.api.types import is_numeric_dtype
 
@@ -203,10 +204,25 @@ _VALIDATION_HARNESS = textwrap.dedent(
     original_preserved = all(c in out.columns for c in original)
     rows_preserved = (len(out) == n_in) and out.index.equals(df.index)
     all_numeric = all(is_numeric_dtype(out[c]) for c in new_cols)
-    all_finite_ok = all(out[c].notna().any() or len(out) == 0 for c in new_cols)
+    all_new_have_values = all(out[c].notna().any() or len(out) == 0 for c in new_cols)
+
+
+    def _has_inf(col):
+        """True if the column holds +/-inf. NaN is fine; infinity is not."""
+        values = pd.to_numeric(out[col], errors="coerce").to_numpy(dtype="float64")
+        return bool(np.isinf(values).any())
+
+    # Infinity is the one non-finite value that survives the whole preprocessing
+    # chain and then kills the fit: SimpleImputer runs with
+    # force_all_finite="allow-nan", so it replaces NaN but passes inf straight
+    # through to sklearn's finite assertion. A live run lost a whole dataset to
+    # exactly this (an unguarded ratio in generated FE code), because the old
+    # check here was a nan check misleadingly named `all_finite_ok`. Rejecting inf
+    # at the validation gate means such code never reaches the Trainer at all.
+    no_infinities = not any(_has_inf(c) for c in new_cols)
 
     emit_metrics(
-        ok=bool(original_preserved and rows_preserved and all_numeric),
+        ok=bool(original_preserved and rows_preserved and all_numeric and no_infinities),
         n_rows_in=int(n_in),
         n_rows_out=int(len(out)),
         new_columns=list(new_cols),
@@ -214,7 +230,9 @@ _VALIDATION_HARNESS = textwrap.dedent(
         original_preserved=bool(original_preserved),
         rows_preserved=bool(rows_preserved),
         all_numeric=bool(all_numeric),
-        all_new_have_values=bool(all_finite_ok),
+        all_new_have_values=bool(all_new_have_values),
+        no_infinities=bool(no_infinities),
+        infinite_columns=[c for c in new_cols if _has_inf(c)],
     )
     print("FE_VALIDATION_OK", flush=True)
     '''
@@ -247,7 +265,7 @@ def _validate_fe(fe_source: str, dataset_key: str, *, timeout_s: int = 60) -> di
             {k: metrics.get(k) for k in (
                 "n_rows_in", "n_rows_out", "new_columns", "n_new",
                 "original_preserved", "rows_preserved", "all_numeric",
-                "all_new_have_values",
+                "all_new_have_values", "no_infinities", "infinite_columns",
             )}
         )
     else:
@@ -264,15 +282,24 @@ def _verdict_error(verdict: dict[str, Any]) -> str:
     broken = [
         check
         for check in (
-            "original_preserved", "rows_preserved", "all_numeric", "all_new_have_values",
+            "original_preserved", "rows_preserved", "all_numeric",
+            "all_new_have_values", "no_infinities",
         )
         if verdict.get(check) is False
     ]
+    detail = ""
+    if verdict.get("no_infinities") is False:
+        bad = verdict.get("infinite_columns") or []
+        detail = (
+            f" The column(s) {bad} contain +/-inf — guard every division and log "
+            "with a safe denominator; NaN is acceptable but infinity is not."
+        )
     return (
         "add_features ran but broke the contract: "
         + (", ".join(f"{c}=False" for c in broken) or "validation reported not-ok")
         + ". Every original column and the row order/index must be preserved and "
-        "every engineered column must be numeric with at least one non-null value."
+        "every engineered column must be numeric, finite, and have at least one "
+        "non-null value." + detail
     )
 
 

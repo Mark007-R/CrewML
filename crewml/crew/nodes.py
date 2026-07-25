@@ -98,7 +98,15 @@ def trainer(state: CrewState) -> dict[str, Any]:
         state["dataset_key"],
         iteration=state.get("iteration", 0),
     )
-    return {"training": training, "trace": ["trainer"]}
+    update: dict[str, Any] = {"training": training, "trace": ["trainer"]}
+    # A self-repair (Day 20) may have rewritten add_features to get the run to
+    # complete. The Ensembler is called with state["fe_code"], so without this
+    # write-back it would re-run the exact code that just crashed — and any later
+    # holdout scoring would re-apply an FE the shipped model was never fitted
+    # with. Adopt the FE the winning run actually persisted.
+    if training.get("fe_code_used"):
+        update["fe_code"] = training["fe_code_used"]
+    return update
 
 
 # --- Ablation stand-ins (Day 14) — naive floors, not smarter alternatives ---

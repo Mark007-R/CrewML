@@ -113,13 +113,41 @@ def _collect_llm_usage(state: dict[str, Any]) -> dict[str, Any]:
         _add("critic", c.get("llm_narrative"))
 
     # The Feature Engineer records tokens on its meta, not a narrative dict.
+    # NOTE: match every LLM-AUTHORED source, not just "llm". Day 20 added
+    # "llm_repaired" (generation failed validation, the self-repair loop fixed
+    # it, and the fix is what shipped). Testing `== "llm"` there would erase the
+    # provenance of code an LLM wrote, and — when the FE is the only live surface —
+    # let ``any_live`` go False, making the MODEL_CARD assert that no LLM ran live
+    # on a run that made two or more live calls. That is the one claim this
+    # module exists to get right.
     fe_meta = state.get("fe_meta") or {}
-    if fe_meta.get("source") == "llm":
+    if fe_meta.get("source") in ("llm", "llm_repaired"):
         narratives.append({
             "node": "feature_engineer", "source": fe_meta.get("provider"),
             "model": fe_meta.get("model"), "live": True,
             "prompt_tokens": fe_meta.get("prompt_tokens"),
             "completion_tokens": fe_meta.get("completion_tokens"), "reason": None,
+        })
+    # The repair attempts are additional live calls with their own token cost.
+    fe_repair = fe_meta.get("repair") or {}
+    if fe_repair.get("attempted") and (fe_repair.get("attempts") or []):
+        narratives.append({
+            "node": "feature_engineer_repair", "source": fe_meta.get("provider"),
+            "model": fe_meta.get("model"), "live": True,
+            "prompt_tokens": fe_repair.get("total_prompt_tokens"),
+            "completion_tokens": fe_repair.get("total_completion_tokens"),
+            "reason": None,
+        })
+    # ...and so are the Trainer's, which are billed to the same provider.
+    tr_repair = (state.get("training") or {}).get("repair") or {}
+    if tr_repair.get("attempted") and (tr_repair.get("attempts") or []):
+        first = tr_repair["attempts"][0]
+        narratives.append({
+            "node": "trainer_repair", "source": first.get("provider"),
+            "model": first.get("model"), "live": True,
+            "prompt_tokens": tr_repair.get("total_prompt_tokens"),
+            "completion_tokens": tr_repair.get("total_completion_tokens"),
+            "reason": None,
         })
 
     live = sum(1 for n in narratives if n["live"])
@@ -178,6 +206,27 @@ def build_report(state: dict[str, Any]) -> dict[str, Any]:
         warnings.append("Run was in MOCK LLM mode — advisory narratives are unavailable, not real model output.")
     if not llm_usage["any_live"]:
         warnings.append("No advisory LLM narrative ran live this run; every decision stands on the deterministic core.")
+    # Self-repair (Day 20) must never be a silent save: if the shipped model came
+    # from code that had to be fixed after crashing, the reader is told so here.
+    tr_rep = training.get("repair") or {}
+    if training.get("repaired"):
+        n = len(tr_rep.get("attempts") or [])
+        warnings.append(
+            f"Training code CRASHED and was repaired by the self-repair loop "
+            f"({n} attempt(s)); the shipped model comes from the repaired script, "
+            "not the originally generated one."
+        )
+    elif tr_rep.get("attempted") and not tr_rep.get("recovered"):
+        warnings.append(
+            "Training code crashed and self-repair did NOT recover it — the "
+            "attempt trail is recorded under training.repair."
+        )
+    if fe_meta.get("source") == "llm_repaired":
+        warnings.append(
+            "The shipped feature-engineering code failed validation on first "
+            "generation and was repaired before passing; provenance under "
+            "fe_meta.repair."
+        )
 
     report: dict[str, Any] = {
         "schema_version": REPORT_SCHEMA_VERSION,
@@ -213,6 +262,11 @@ def build_report(state: dict[str, Any]) -> dict[str, Any]:
             "cv_score": training.get("cv_score"),
             "per_model": (training.get("metrics") or {}).get("per_model"),
             "error": training.get("error"),
+            # Day 20: a repaired run is reported as repaired, never as a clean
+            # first-try run. `repair_attempts` is 0 on the common clean path.
+            "repaired": bool(training.get("repaired")),
+            "repair_attempts": len(tr_rep.get("attempts") or []),
+            "repair_recovered_on_attempt": tr_rep.get("recovered_on_attempt"),
         },
         "ensemble": {
             "attempted": ensemble.get("attempted"),

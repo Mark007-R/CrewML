@@ -108,15 +108,28 @@ def diagnose(
     flags = set((profile.get("assessment") or {}).get("flags") or [])
     dropped = set(plan.get("drop_columns") or [])
 
-    # -- Execution failure: nothing to diagnose, and self-repair is Day 20 -------
+    # -- Execution failure: the self-repair loop already had its turn -----------
+    # Since Day 20 the Trainer feeds the traceback back to the provider before the
+    # Critic ever sees the record, so reaching here means repair was unavailable,
+    # disabled, out of attempts, or the failure was a timeout/OOM (deliberately
+    # non-repairable). There is still no plan-level keyword for a crash.
     if not training.get("ok"):
+        repair = training.get("repair") or {}
+        if repair.get("attempted"):
+            spent = len(repair.get("attempts") or [])
+            outcome = f"self-repair ran {spent} attempt(s) and did not recover"
+        else:
+            outcome = (
+                "self-repair did not run "
+                f"({repair.get('reason_not_attempted') or 'unknown reason'})"
+            )
         findings.append({
             "code": "execution_error",
-            "keyword": None,   # no Planner keyword: a crash isn't a plan-level fix (yet)
+            "keyword": None,   # no Planner keyword: a crash isn't a plan-level fix
             "severity": "blocker",
             "detail": f"Trainer run failed: {training.get('error') or 'unknown error'}.",
-            "directive": "Execution crashed; automated self-repair (feed the traceback back "
-                         "and retry) lands Day 20. Finalising this pass without a model.",
+            "directive": f"Execution crashed and {outcome}. "
+                         "Finalising this pass without a model.",
         })
         return findings
 
@@ -249,7 +262,7 @@ def decide(
     actionable = [f for f in findings if f.get("keyword")]
 
     if not training.get("ok"):
-        return "finalize", "training run failed — nothing to iterate on (self-repair is Day 20)", delta
+        return "finalize", "training run failed and self-repair did not recover it — nothing to iterate on", delta
     if not actionable:
         return "finalize", "no actionable failure modes found — the run is clean, finalising", delta
     if int(iteration) >= int(max_iterations):
