@@ -32,6 +32,28 @@ from typing import Any, Optional
 
 from crewml.config import RESULTS_DIR
 
+
+def int_keyed(curve: Optional[dict]) -> dict[int, Any]:
+    """A depth-curve with integer keys, however it arrived.
+
+    Depth curves are built in memory with ``int`` keys, but ``json.dump`` converts
+    every mapping key to a string — so a curve *re-read from disk* is keyed ``"1"``,
+    ``"2"``. Consumers that looked up ``curve.get(1)`` therefore worked when handed a
+    fresh in-memory report and silently returned ``None`` when handed the committed
+    JSON, dropping two real measured columns to em-dashes on any re-render (and
+    turning the chart's x-axis categorical, losing its budget-bound markers).
+    Normalise at the point of use so both paths agree.
+    """
+    if not curve:
+        return {}
+    out: dict[int, Any] = {}
+    for k, v in curve.items():
+        try:
+            out[int(k)] = v
+        except (TypeError, ValueError):
+            continue
+    return out
+
 # --- Inputs: one committed file per study (all tracked in git) ---
 COMPARISON_TABLE_PATH = RESULTS_DIR / "comparison_table.json"
 CRITIC_ABLATION_PATH = RESULTS_DIR / "day13_critic_ablation.json"
@@ -422,7 +444,7 @@ def render_markdown(report: dict) -> str:
     add("| Probe dataset | Budget 1 | Budget 2 | First-loop lift | Beyond first loop | Saturation |")
     add("|---|---|---|---|---|---|")
     for key, s in depth["probe_summary"].items():
-        curve = depth["probe_curves"].get(key, {})
+        curve = int_keyed(depth["probe_curves"].get(key))
         add(
             f"| {key} | {_fmt(curve.get(1))} | {_fmt(curve.get(2))} | "
             f"{_fmt_signed(s.get('first_loop_lift'))} | "

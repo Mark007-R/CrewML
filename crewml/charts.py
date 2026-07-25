@@ -24,6 +24,7 @@ matplotlib.use("Agg")  # headless: charts render on a scheduled run with no disp
 import matplotlib.pyplot as plt
 
 from crewml.comparison import HEADLINE_DELTAS, METRIC_LABEL, SYSTEMS
+from crewml.phase3_results import int_keyed
 from crewml.config import RESULTS_DIR
 
 CHARTS_DIR = RESULTS_DIR / "charts"
@@ -650,7 +651,10 @@ def plot_phase3_summary(report: dict, path: Path = PHASE3_SUMMARY_CHART_PATH) ->
     ax_attr.spines[["top", "right"]].set_visible(False)
 
     # --- Panel 3: iteration-depth cliff (Day 15) ---
-    for key, curve in depth["probe_curves"].items():
+    for key, raw_curve in depth["probe_curves"].items():
+        # int_keyed: a curve re-read from JSON is keyed "1"/"2", which plots as a
+        # CATEGORICAL axis and makes the int budget_bound_depths below never match.
+        curve = int_keyed(raw_curve)
         ds = sorted(curve)
         ax_depth.plot(ds, [curve[d] for d in ds], marker="o", linewidth=2, label=key)
         bound = depth["probe_summary"].get(key, {}).get("budget_bound_depths", [])
@@ -660,7 +664,8 @@ def plot_phase3_summary(report: dict, path: Path = PHASE3_SUMMARY_CHART_PATH) ->
                               color=LOSS_COLOUR, markeredgewidth=2.5)
     ax_depth.set_xlabel("Critic-loop budget (max_iterations)", fontsize=8)
     ax_depth.set_ylabel("holdout R²", fontsize=8)
-    ax_depth.set_xticks(sorted({d for c in depth["probe_curves"].values() for d in c}))
+    ax_depth.set_xticks(sorted({d for c in depth["probe_curves"].values()
+                                for d in int_keyed(c)}))
     ax_depth.set_title("Depth-response under forced deficiency (Day 15)\n"
                        "× = budget-bound (cut off, not done); natural sweep is flat",
                        fontsize=9, fontweight="bold")
