@@ -79,7 +79,7 @@ def _final_model(training: dict[str, Any], ensemble: dict[str, Any]) -> dict[str
         "kind": "none",
         "chosen": None,
         "cv_score": None,
-        "note": "training failed — no model produced (self-repair is Day 20)",
+        "note": "training failed — no model produced, and self-repair did not recover it",
     }
 
 
@@ -388,8 +388,15 @@ def render_model_card(report: dict[str, Any]) -> str:
 
 {warnings}
 
-- The executor is a **process-isolation** sandbox, not yet a security sandbox
-  (hardening is Phase 4 / Day 19).
+- The executor runs generated code under a **SandboxPolicy** (Day 19): stdlib +
+  DS-stack import allowlist, no network egress, a filesystem jail, and memory/CPU
+  caps. That is defence-in-depth against careless generated code, **not** a
+  hostile-adversary boundary — true OS-level isolation arrives with the Day-27
+  Docker wrapper.
+- Generated code that **crashes** gets one bounded self-repair pass (Day 20): the
+  traceback goes back to the provider and a repaired run is adopted only if it
+  clears the same acceptance gate. Any repair is disclosed in the warnings above,
+  never applied silently. Timeouts and memory kills are never repaired.
 - "Overfit" signals from the Critic are **cross-validation fold-instability**, not a
   train-vs-held-out gap — the crew cannot see the held-out split by construction.
 """

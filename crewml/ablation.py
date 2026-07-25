@@ -150,13 +150,24 @@ def run_variant(
 
     critiques = final.get("critiques") or []
     tmetrics = (final.get("training") or {}).get("metrics") or {}
+    _facts = extract_run_facts(final)
     record = {
         **scored,
         # Cost + loop-outcome facts (Day 15): token totals and whether the last Critic
         # pass was cut off by the budget rather than satisfied.
-        **extract_run_facts(final),
+        **_facts,
         "variant": variant,
-        "mock": is_mock_mode(),
+        # `is_mock_mode()` only checks whether a KEY IS PRESENT, so a configured but
+        # dead provider (revoked key, restricted org, exhausted quota) was recorded
+        # as a real live run. Trust the observed narrative count instead: a run with
+        # a key but zero live narratives is effectively a mock run and must be
+        # labelled as one. `mock_reason` keeps the two cases distinguishable.
+        "mock": bool(is_mock_mode() or not _facts.get("llm_narratives_live")),
+        "mock_reason": (
+            "no_key" if is_mock_mode()
+            else (None if _facts.get("llm_narratives_live")
+                  else "key_present_but_no_live_narratives")
+        ),
         "iterations_run": final.get("iteration"),
         "max_iterations": final.get("max_iterations"),
         "loop_fired": bool((final.get("iteration") or 0) > 1),

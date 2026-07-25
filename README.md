@@ -3,12 +3,16 @@
 **An autonomous multi-agent ML engineering crew.** Give it a raw tabular dataset
 and a task (classification or regression); a LangGraph crew of specialised agents
 profiles the data, plans an approach, engineers features, trains and critiques
-models in a loop, ensembles the best, and writes a report — then proves it beat a
-single solo agent and classical AutoML on data it never saw.
+models in a loop, ensembles the best, and writes a report — then measures itself
+against a solo agent, a default RandomForest and classical AutoML on data it never saw.
 
-> **The claim we are out to earn:** a genuine multi-agent crew with a critique loop
-> produces better models than one LLM doing it single-shot, and is competitive with
-> a strong classical AutoML baseline — measured honestly on a locked held-out set.
+> **The claim, and what the numbers actually say.** A genuine multi-agent crew with a
+> critique loop produces better models than one LLM doing it single-shot, and is
+> competitive with a strong classical AutoML baseline. Measured on the locked
+> held-out set (Day 12): the crew beats the solo agent **3/3** where solo produced a
+> model at all (it crashed on 2 of 5 datasets), beats a default RandomForest **5/5**,
+> and beats FLAML on **3 of 5** — losing cpu_small by 0.001 and kin8nm by 0.024.
+> "Competitive with AutoML" is the honest phrasing; "beats AutoML" would not be.
 
 ## The crew
 
@@ -92,9 +96,14 @@ Built in the open over 30 days. Every committed run leaves its numbers in
 - **Phase 1 — Foundation & Baselines** (Days 1–4) ✓ complete
 - **Phase 2 — MVP Crew** (Days 5–11) ✓ complete · all seven nodes real — the crew takes a raw
   dataset to a trained model + model card on its own, with a working Critic loop
-- Phase 3 — Comparison Studies (Days 12–18) ← next: the crew meets the **locked holdout**,
-  head-to-head vs. the solo agent and the AutoML ceiling
-- Phase 4 — Hardening & Safety (Days 19–23)
+- **Phase 3 — Comparison Studies** (Days 12–18) ✓ complete · crew vs solo vs AutoML vs
+  default on the **locked holdout**, plus per-agent ablations, an iteration-depth study,
+  a provider study and a failure taxonomy
+- Phase 4 — Hardening & Safety (Days 19–23) ← **in progress**: a real executor sandbox
+  (Day 19 — import allowlist, no network egress, filesystem jail, resource caps) and a
+  self-repair loop that recovers crashed generated code (Day 20 — 18/18 injected faults
+  recovered live, every one on the first attempt). Budgets, leakage/honesty guards and
+  reproducibility are Days 21–23.
 - Phase 5 — Production Wrapper (Days 24–27)
 - Phase 6 — Ship (Days 28–30)
 

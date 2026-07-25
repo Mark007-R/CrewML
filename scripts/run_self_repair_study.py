@@ -36,6 +36,7 @@ from crewml.charts import plot_self_repair
 from crewml.self_repair_study import (
     FAULTS,
     SELF_REPAIR_RESULT_PATH,
+    SELF_REPAIR_TABLE_MD_PATH,
     STUDY_DATASETS,
     render_table_md,
     run_self_repair_study,
@@ -60,6 +61,11 @@ def main() -> int:
 
     if args.table_only:
         report = json.loads(SELF_REPAIR_RESULT_PATH.read_text(encoding="utf-8"))
+        # Re-render the MARKDOWN too, not just the chart. Previously this branch
+        # printed the table and rewrote the PNG but left results/*.md untouched,
+        # so a hand-merged JSON produced a correct chart beside a stale table —
+        # the committed Day-20 table said "2/2" while the JSON and chart said 18/18.
+        SELF_REPAIR_TABLE_MD_PATH.write_text(render_table_md(report), encoding="utf-8")
     else:
         datasets = tuple(k for k in args.datasets.split(",") if k)
         wanted = {k for k in args.faults.split(",") if k}

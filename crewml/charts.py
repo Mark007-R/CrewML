@@ -16,6 +16,7 @@ rather than drawn at zero, since a failed run is not a score of nought.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
 import matplotlib
 
@@ -154,9 +155,23 @@ def plot_crew_deltas(table: dict, path: Path = DELTAS_CHART_PATH) -> Path:
     return path
 
 
-def render_all(table: dict) -> list[Path]:
-    """Render every Day-12 figure; returns the written paths."""
-    return [plot_holdout_scores(table), plot_crew_deltas(table)]
+def render_all(table: dict, out_dir: Optional[Path] = None) -> list[Path]:
+    """Render every Day-12 figure; returns the written paths.
+
+    ``out_dir`` exists so tests can render into a temp directory. Without it a
+    test that only wanted to prove headless rendering works would write its
+    FIXTURE numbers over the committed board — which is exactly what happened:
+    the Day-12 PNGs committed in 57d0daa were test output (a flat
+    0.500/0.700/0.850/0.900 across all five panels, no solo-agent bar, and both
+    AutoML losses painted green) rather than the real results.
+    """
+    if out_dir is None:
+        return [plot_holdout_scores(table), plot_crew_deltas(table)]
+    out_dir = Path(out_dir)
+    return [
+        plot_holdout_scores(table, out_dir / SCORES_CHART_PATH.name),
+        plot_crew_deltas(table, out_dir / DELTAS_CHART_PATH.name),
+    ]
 
 
 # --- Day 13: the Critic-loop ablation ---------------------------------------
@@ -466,9 +481,18 @@ def plot_provider_study(report: dict, path: Path = PROVIDER_STUDY_CHART_PATH) ->
     ax_scores.set_xticks(range(len(keys)))
     ax_scores.set_xticklabels(keys, fontsize=8)
     ax_scores.set_ylabel("held-out score (higher is better)", fontsize=8)
-    ax_scores.set_title("Holdout quality by arm — identical bars = provider-independent core\n"
-                        "(no live-provider arm ran this session; mock is never a headline)",
-                        fontsize=9, fontweight="bold")
+    # Derive the caption from the data. It used to hard-code "no live-provider arm
+    # ran this session" and "identical bars", and both became false once the live
+    # Groq arm was backfilled — the figure asserted the opposite of the bars under it.
+    _probes = report.get("probes") or {}
+    _live = sorted(p for p, pr in _probes.items()
+                   if isinstance(pr, dict) and pr.get("status") == "ok")
+    _live_txt = ("live arm: " + ", ".join(_live)) if _live else "no live-provider arm ran"
+    ax_scores.set_title(
+        f"Holdout quality by arm — {_live_txt}\n"
+        "(mock is shown for reference and is never a headline)",
+        fontsize=9, fontweight="bold",
+    )
     ax_scores.spines[["top", "right"]].set_visible(False)
     ax_scores.margins(y=0.2)
     ax_scores.legend(fontsize=7, frameon=False, loc="lower right")
