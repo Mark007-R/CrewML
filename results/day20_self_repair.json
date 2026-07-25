@@ -1,0 +1,454 @@
+{
+  "schema_version": 1,
+  "study": "day20_self_repair",
+  "repairer": "scripted",
+  "is_measurement_of_llm_capability": false,
+  "repairer_note": "DETERMINISTIC STAND-IN, NOT AN LLM: a fixed fault-blind policy (strip sandbox-refused imports; restore add_features to the contract-minimal implementation). Measures the mechanism \u2014 fault detonation, loop firing, sandboxed re-run adoption, score fidelity, artifact consistency. Says nothing about model repair skill.",
+  "provider": "scripted_stand_in",
+  "model": "deterministic-repair-policy",
+  "is_mock": false,
+  "max_attempts": 2,
+  "datasets": [
+    "credit-g",
+    "cpu_small"
+  ],
+  "n_faults": 8,
+  "n_injected_runs": 16,
+  "recovery_rate": 1.0,
+  "recovered_runs": 16,
+  "first_attempt_recoveries": 16,
+  "mean_abs_score_fidelity": 0.0,
+  "max_abs_score_fidelity": 0.0,
+  "false_positive_repairs_on_clean": 0,
+  "fe_artifact_inconsistencies": 0,
+  "total_prompt_tokens": 0,
+  "total_completion_tokens": 0,
+  "total_wall_s": 286.4,
+  "clean_scores": {
+    "credit-g": 0.794048,
+    "cpu_small": 0.977309
+  },
+  "runs": [
+    {
+      "dataset": "credit-g",
+      "fault": "none_control",
+      "taxonomy": "control",
+      "description": "clean FE \u2014 repair must not fire",
+      "ok": true,
+      "repair_attempted": false,
+      "recovered": false,
+      "recovered_on_attempt": null,
+      "attempts_used": 0,
+      "attempt_errors": [],
+      "cv_score": 0.794048,
+      "score_fidelity_vs_clean": null,
+      "fe_artifact_consistent": true,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "wall_s": 11.3
+    },
+    {
+      "dataset": "credit-g",
+      "fault": "name_error",
+      "taxonomy": "exec_error",
+      "description": "references an undefined variable",
+      "ok": true,
+      "repair_attempted": true,
+      "recovered": true,
+      "recovered_on_attempt": 1,
+      "attempts_used": 1,
+      "attempt_errors": [
+        {
+          "attempt": 1,
+          "stage": null,
+          "ok": true
+        }
+      ],
+      "cv_score": 0.794048,
+      "score_fidelity_vs_clean": 0.0,
+      "fe_artifact_consistent": true,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "wall_s": 15.0
+    },
+    {
+      "dataset": "credit-g",
+      "fault": "key_error",
+      "taxonomy": "exec_error",
+      "description": "indexes a column that does not exist",
+      "ok": true,
+      "repair_attempted": true,
+      "recovered": true,
+      "recovered_on_attempt": 1,
+      "attempts_used": 1,
+      "attempt_errors": [
+        {
+          "attempt": 1,
+          "stage": null,
+          "ok": true
+        }
+      ],
+      "cv_score": 0.794048,
+      "score_fidelity_vs_clean": 0.0,
+      "fe_artifact_consistent": true,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "wall_s": 14.3
+    },
+    {
+      "dataset": "credit-g",
+      "fault": "type_error",
+      "taxonomy": "exec_error",
+      "description": "adds a string to a numeric series",
+      "ok": true,
+      "repair_attempted": true,
+      "recovered": true,
+      "recovered_on_attempt": 1,
+      "attempts_used": 1,
+      "attempt_errors": [
+        {
+          "attempt": 1,
+          "stage": null,
+          "ok": true
+        }
+      ],
+      "cv_score": 0.794048,
+      "score_fidelity_vs_clean": 0.0,
+      "fe_artifact_consistent": true,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "wall_s": 14.6
+    },
+    {
+      "dataset": "credit-g",
+      "fault": "syntax_error",
+      "taxonomy": "exec_error",
+      "description": "unbalanced parenthesis \u2014 the module cannot even parse",
+      "ok": true,
+      "repair_attempted": true,
+      "recovered": true,
+      "recovered_on_attempt": 1,
+      "attempts_used": 1,
+      "attempt_errors": [
+        {
+          "attempt": 1,
+          "stage": null,
+          "ok": true
+        }
+      ],
+      "cv_score": 0.794048,
+      "score_fidelity_vs_clean": 0.0,
+      "fe_artifact_consistent": true,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "wall_s": 12.7
+    },
+    {
+      "dataset": "credit-g",
+      "fault": "zero_division",
+      "taxonomy": "exec_error",
+      "description": "unconditional integer division by zero",
+      "ok": true,
+      "repair_attempted": true,
+      "recovered": true,
+      "recovered_on_attempt": 1,
+      "attempts_used": 1,
+      "attempt_errors": [
+        {
+          "attempt": 1,
+          "stage": null,
+          "ok": true
+        }
+      ],
+      "cv_score": 0.794048,
+      "score_fidelity_vs_clean": 0.0,
+      "fe_artifact_consistent": true,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "wall_s": 13.4
+    },
+    {
+      "dataset": "credit-g",
+      "fault": "import_error",
+      "taxonomy": "exec_error",
+      "description": "imports a package the Day-19 sandbox refuses",
+      "ok": true,
+      "repair_attempted": true,
+      "recovered": true,
+      "recovered_on_attempt": 1,
+      "attempts_used": 1,
+      "attempt_errors": [
+        {
+          "attempt": 1,
+          "stage": null,
+          "ok": true
+        }
+      ],
+      "cv_score": 0.794048,
+      "score_fidelity_vs_clean": 0.0,
+      "fe_artifact_consistent": true,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "wall_s": 13.8
+    },
+    {
+      "dataset": "credit-g",
+      "fault": "attribute_error",
+      "taxonomy": "exec_error",
+      "description": "calls a DataFrame method that does not exist",
+      "ok": true,
+      "repair_attempted": true,
+      "recovered": true,
+      "recovered_on_attempt": 1,
+      "attempts_used": 1,
+      "attempt_errors": [
+        {
+          "attempt": 1,
+          "stage": null,
+          "ok": true
+        }
+      ],
+      "cv_score": 0.794048,
+      "score_fidelity_vs_clean": 0.0,
+      "fe_artifact_consistent": true,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "wall_s": 14.2
+    },
+    {
+      "dataset": "credit-g",
+      "fault": "index_error",
+      "taxonomy": "exec_error",
+      "description": "positional index far past the end of the frame",
+      "ok": true,
+      "repair_attempted": true,
+      "recovered": true,
+      "recovered_on_attempt": 1,
+      "attempts_used": 1,
+      "attempt_errors": [
+        {
+          "attempt": 1,
+          "stage": null,
+          "ok": true
+        }
+      ],
+      "cv_score": 0.794048,
+      "score_fidelity_vs_clean": 0.0,
+      "fe_artifact_consistent": true,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "wall_s": 15.6
+    },
+    {
+      "dataset": "cpu_small",
+      "fault": "none_control",
+      "taxonomy": "control",
+      "description": "clean FE \u2014 repair must not fire",
+      "ok": true,
+      "repair_attempted": false,
+      "recovered": false,
+      "recovered_on_attempt": null,
+      "attempts_used": 0,
+      "attempt_errors": [],
+      "cv_score": 0.977309,
+      "score_fidelity_vs_clean": null,
+      "fe_artifact_consistent": true,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "wall_s": 16.0
+    },
+    {
+      "dataset": "cpu_small",
+      "fault": "name_error",
+      "taxonomy": "exec_error",
+      "description": "references an undefined variable",
+      "ok": true,
+      "repair_attempted": true,
+      "recovered": true,
+      "recovered_on_attempt": 1,
+      "attempts_used": 1,
+      "attempt_errors": [
+        {
+          "attempt": 1,
+          "stage": null,
+          "ok": true
+        }
+      ],
+      "cv_score": 0.977309,
+      "score_fidelity_vs_clean": 0.0,
+      "fe_artifact_consistent": true,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "wall_s": 19.4
+    },
+    {
+      "dataset": "cpu_small",
+      "fault": "key_error",
+      "taxonomy": "exec_error",
+      "description": "indexes a column that does not exist",
+      "ok": true,
+      "repair_attempted": true,
+      "recovered": true,
+      "recovered_on_attempt": 1,
+      "attempts_used": 1,
+      "attempt_errors": [
+        {
+          "attempt": 1,
+          "stage": null,
+          "ok": true
+        }
+      ],
+      "cv_score": 0.977309,
+      "score_fidelity_vs_clean": 0.0,
+      "fe_artifact_consistent": true,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "wall_s": 19.7
+    },
+    {
+      "dataset": "cpu_small",
+      "fault": "type_error",
+      "taxonomy": "exec_error",
+      "description": "adds a string to a numeric series",
+      "ok": true,
+      "repair_attempted": true,
+      "recovered": true,
+      "recovered_on_attempt": 1,
+      "attempts_used": 1,
+      "attempt_errors": [
+        {
+          "attempt": 1,
+          "stage": null,
+          "ok": true
+        }
+      ],
+      "cv_score": 0.977309,
+      "score_fidelity_vs_clean": 0.0,
+      "fe_artifact_consistent": true,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "wall_s": 18.8
+    },
+    {
+      "dataset": "cpu_small",
+      "fault": "syntax_error",
+      "taxonomy": "exec_error",
+      "description": "unbalanced parenthesis \u2014 the module cannot even parse",
+      "ok": true,
+      "repair_attempted": true,
+      "recovered": true,
+      "recovered_on_attempt": 1,
+      "attempts_used": 1,
+      "attempt_errors": [
+        {
+          "attempt": 1,
+          "stage": null,
+          "ok": true
+        }
+      ],
+      "cv_score": 0.977309,
+      "score_fidelity_vs_clean": 0.0,
+      "fe_artifact_consistent": true,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "wall_s": 16.0
+    },
+    {
+      "dataset": "cpu_small",
+      "fault": "zero_division",
+      "taxonomy": "exec_error",
+      "description": "unconditional integer division by zero",
+      "ok": true,
+      "repair_attempted": true,
+      "recovered": true,
+      "recovered_on_attempt": 1,
+      "attempts_used": 1,
+      "attempt_errors": [
+        {
+          "attempt": 1,
+          "stage": null,
+          "ok": true
+        }
+      ],
+      "cv_score": 0.977309,
+      "score_fidelity_vs_clean": 0.0,
+      "fe_artifact_consistent": true,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "wall_s": 18.7
+    },
+    {
+      "dataset": "cpu_small",
+      "fault": "import_error",
+      "taxonomy": "exec_error",
+      "description": "imports a package the Day-19 sandbox refuses",
+      "ok": true,
+      "repair_attempted": true,
+      "recovered": true,
+      "recovered_on_attempt": 1,
+      "attempts_used": 1,
+      "attempt_errors": [
+        {
+          "attempt": 1,
+          "stage": null,
+          "ok": true
+        }
+      ],
+      "cv_score": 0.977309,
+      "score_fidelity_vs_clean": 0.0,
+      "fe_artifact_consistent": true,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "wall_s": 18.0
+    },
+    {
+      "dataset": "cpu_small",
+      "fault": "attribute_error",
+      "taxonomy": "exec_error",
+      "description": "calls a DataFrame method that does not exist",
+      "ok": true,
+      "repair_attempted": true,
+      "recovered": true,
+      "recovered_on_attempt": 1,
+      "attempts_used": 1,
+      "attempt_errors": [
+        {
+          "attempt": 1,
+          "stage": null,
+          "ok": true
+        }
+      ],
+      "cv_score": 0.977309,
+      "score_fidelity_vs_clean": 0.0,
+      "fe_artifact_consistent": true,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "wall_s": 17.7
+    },
+    {
+      "dataset": "cpu_small",
+      "fault": "index_error",
+      "taxonomy": "exec_error",
+      "description": "positional index far past the end of the frame",
+      "ok": true,
+      "repair_attempted": true,
+      "recovered": true,
+      "recovered_on_attempt": 1,
+      "attempts_used": 1,
+      "attempt_errors": [
+        {
+          "attempt": 1,
+          "stage": null,
+          "ok": true
+        }
+      ],
+      "cv_score": 0.977309,
+      "score_fidelity_vs_clean": 0.0,
+      "fe_artifact_consistent": true,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "wall_s": 17.2
+    }
+  ],
+  "holdout_seal_intact": true
+}

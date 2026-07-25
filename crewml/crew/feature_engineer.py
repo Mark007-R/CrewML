@@ -21,8 +21,10 @@ Two honesty/robustness disciplines carry over from the Profiler and Planner:
   it for dataset-specific ``add_features`` code, then **executes that code in the
   sandbox** on the train split. Only if it runs cleanly, preserves the row count
   and index, keeps every original column, and adds *numeric* columns is it
-  trusted; otherwise the agent records the reason and falls back to the default.
-  An LLM never contributes an *unvalidated* line of code to a real run.
+  trusted; otherwise the agent records the reason and — since Day 20 — hands the
+  failed verdict to the :mod:`crewml.repair` loop for a bounded second chance
+  before falling back to the default. An LLM never contributes an *unvalidated*
+  line of code to a real run; repaired code passes the same gate as any other.
 
 **The row-wise contract (why applying FE before CV is leakage-free).** Engineered
 features must be a function of a single row's own values — no fitting, no target,
@@ -46,8 +48,9 @@ from typing import Any, Optional
 from crewml import config, llm
 from crewml.datasets import train_path
 from crewml.executor import run_code
+from crewml.repair import repair_enabled_for_fe, repair_loop
 
-FE_SCHEMA_VERSION = 1
+FE_SCHEMA_VERSION = 2  # v2 (Day 20): + "llm_repaired" source and "repair" provenance
 
 # The engineered-column name the deterministic default contributes. Kept as a
 # constant so the report and tests can name it without magic strings.
@@ -252,6 +255,48 @@ def _validate_fe(fe_source: str, dataset_key: str, *, timeout_s: int = 60) -> di
     return verdict
 
 
+# --- Self-repair support (Day 20) -------------------------------------------
+
+def _verdict_error(verdict: dict[str, Any]) -> str:
+    """Render a failed validation verdict as the 'traceback' the repair loop shows."""
+    if not verdict.get("executed_ok", False):
+        return verdict.get("error") or "add_features crashed during sandbox validation"
+    broken = [
+        check
+        for check in (
+            "original_preserved", "rows_preserved", "all_numeric", "all_new_have_values",
+        )
+        if verdict.get(check) is False
+    ]
+    return (
+        "add_features ran but broke the contract: "
+        + (", ".join(f"{c}=False" for c in broken) or "validation reported not-ok")
+        + ". Every original column and the row order/index must be preserved and "
+        "every engineered column must be numeric with at least one non-null value."
+    )
+
+
+_FE_REPAIR_CONTEXT = (
+    "The module defines add_features(df) for a multi-agent ML crew's Feature "
+    "Engineer. Contract: df is a pandas DataFrame of features only (no 'target' "
+    "column exists); return a NEW DataFrame keeping every original column and "
+    "the row order/index, with extra engineered columns appended. Engineered "
+    "columns must be numeric, row-wise and stateless (no fitting, no cross-row "
+    "statistics, no randomness, no I/O), and must never raise on missing values "
+    "or zero denominators."
+)
+
+
+def _fe_repair_run_fn(dataset_key: str):
+    """Adapt sandbox validation to the repair loop's (ok, error, payload) shape."""
+
+    def run(source: str):
+        verdict = _validate_fe(source, dataset_key)
+        return verdict["ok"], (None if verdict["ok"] else _verdict_error(verdict)), verdict
+
+    return run
+
+
 # --- LLM generation (optional, always validated before trust) ---------------
 
 def _llm_enabled(with_llm: Optional[bool]) -> bool:
@@ -289,15 +334,20 @@ def run_feature_engineer(
     dataset_key: str,
     *,
     with_llm: Optional[bool] = None,
+    self_repair: Optional[bool] = None,
 ) -> dict[str, Any]:
     """Produce validated feature-engineering code for ``dataset_key`` from the plan.
 
     Returns ``{"code": <source>, "meta": <provenance>}``. ``code`` is always a
     runnable ``add_features`` module — the LLM's if it was generated *and* passed
     sandbox validation, otherwise the deterministic default. ``meta.source`` is one
-    of ``"llm"``, ``"default"`` (mock mode / LLM disabled), or ``"fallback"`` (LLM
-    tried but its code failed validation), and carries the validation verdict and
-    any token accounting so a report can see exactly what happened.
+    of ``"llm"``, ``"llm_repaired"`` (Day 20 — the generation failed validation but
+    the self-repair loop produced a passing fix, trail under ``meta.repair``),
+    ``"default"`` (mock mode / LLM disabled), or ``"fallback"`` (LLM tried, and any
+    repair attempts failed too), and carries the validation verdict and token
+    accounting so a report can see exactly what happened. Repaired code earns
+    exactly the same trust as first-try code — a full sandbox validation pass —
+    and the fallback ladder beneath it is unchanged.
     """
     meta: dict[str, Any] = {
         "schema_version": FE_SCHEMA_VERSION,
@@ -320,9 +370,33 @@ def run_feature_engineer(
                     validation=verdict,
                 )
                 return {"code": gen["code"], "meta": meta}
-            # Generated but failed the contract — record why and fall back. Keep the
-            # failed verdict under its own key so the default's verdict (below) can
-            # still populate `validation` for the code actually used.
+            # Generated but failed the contract — before falling back, give the
+            # self-repair loop (Day 20) a shot: the failed verdict becomes the
+            # "traceback", and any fix must pass the *same* sandbox validation.
+            if repair_enabled_for_fe(self_repair):
+                repair = repair_loop(
+                    gen["code"],
+                    _verdict_error(verdict),
+                    run_fn=_fe_repair_run_fn(dataset_key),
+                    context=_FE_REPAIR_CONTEXT,
+                )
+                repair_trail = {
+                    k: v for k, v in repair.items() if k not in ("code", "payload")
+                }
+                if repair["recovered"]:
+                    meta.update(
+                        source="llm_repaired", provider=gen["provider"], model=gen["model"],
+                        prompt_tokens=gen["prompt_tokens"],
+                        completion_tokens=gen["completion_tokens"],
+                        validation=repair["payload"],
+                        llm_validation=verdict,
+                        repair=repair_trail,
+                    )
+                    return {"code": repair["code"], "meta": meta}
+                meta["repair"] = repair_trail
+            # Record why and fall back. Keep the failed verdict under its own key
+            # so the default's verdict (below) can still populate `validation`
+            # for the code actually used.
             meta.update(
                 source="fallback", provider=gen.get("provider"), model=gen.get("model"),
                 fallback_reason="generated code failed sandbox validation",

@@ -668,3 +668,91 @@ def plot_phase3_summary(report: dict, path: Path = PHASE3_SUMMARY_CHART_PATH) ->
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return path
+
+
+SELF_REPAIR_CHART_PATH = CHARTS_DIR / "day20_self_repair.png"
+
+# Attempt-count colours for the Day-20 repair chart: recovered first try, needed
+# the second, or the budget was spent and the crash stood.
+REPAIR_COLOURS = {1: "#2a9d8f", 2: "#e9c46a", None: "#d1495b"}
+
+
+def plot_self_repair(report: dict, path: Path = SELF_REPAIR_CHART_PATH) -> Path:
+    """Two panels from ``results/day20_self_repair.json``: which injected faults the
+    repair loop recovered (and on which attempt), and how faithfully the repaired
+    runs reproduce the clean run's CV score. Controls are excluded from the left
+    panel (nothing was injected) but their scores anchor the fidelity deltas."""
+    injected = [r for r in report["runs"] if r["fault"] != "none_control"]
+    datasets = report["datasets"]
+    faults = list(dict.fromkeys(r["fault"] for r in injected))
+    by = {(r["dataset"], r["fault"]): r for r in injected}
+
+    fig, (ax_rec, ax_fid) = plt.subplots(
+        1, 2, figsize=(11.5, 0.5 * len(faults) + 2.8),
+        gridspec_kw={"width_ratios": [5, 4]},
+    )
+
+    # --- Left: recovery matrix — one marker per (fault, dataset) ------------
+    bar_h = 0.36
+    for j, ds in enumerate(datasets):
+        for i, fault in enumerate(faults):
+            r = by.get((ds, fault))
+            if r is None:
+                continue
+            attempt = r["recovered_on_attempt"] if r["recovered"] else None
+            y = i + (j - (len(datasets) - 1) / 2) * bar_h
+            width = attempt if attempt else report["max_attempts"]
+            ax_rec.barh(y, width, height=bar_h * 0.9,
+                        color=REPAIR_COLOURS.get(attempt, REPAIR_COLOURS[None]))
+            label = f"attempt {attempt}" if attempt else "NOT recovered"
+            ax_rec.text(width + 0.05, y, f"{ds}: {label}", va="center", fontsize=7)
+    ax_rec.set_yticks(range(len(faults)))
+    ax_rec.set_yticklabels(faults, fontsize=8, family="monospace")
+    ax_rec.invert_yaxis()
+    ax_rec.set_xlim(0, report["max_attempts"] + 1.6)
+    ax_rec.set_xticks(range(0, report["max_attempts"] + 1))
+    ax_rec.set_xlabel("repair attempts consumed", fontsize=8)
+    rate = report["recovery_rate"]
+    ax_rec.set_title(
+        f"Recovery per injected fault — rate {report['recovered_runs']}"
+        f"/{report['n_injected_runs']} = {rate:.0%}",
+        fontsize=10, fontweight="bold",
+    )
+    ax_rec.spines[["top", "right"]].set_visible(False)
+
+    # --- Right: score fidelity of recovered runs vs the clean control -------
+    recovered = [r for r in injected if r["recovered"]
+                 and r["score_fidelity_vs_clean"] is not None]
+    ys, vals, labels = [], [], []
+    for i, r in enumerate(recovered):
+        ys.append(i)
+        vals.append(r["score_fidelity_vs_clean"])
+        labels.append(f"{r['dataset']}: {r['fault']}")
+    ax_fid.barh(ys, vals, height=0.6,
+                color=[WIN_COLOUR if v >= 0 else LOSS_COLOUR for v in vals])
+    ax_fid.axvline(0, color="#333", lw=0.8)
+    ax_fid.set_yticks(ys)
+    ax_fid.set_yticklabels(labels, fontsize=7, family="monospace")
+    ax_fid.invert_yaxis()
+    # Exact fidelity (every Δ == 0) is the *good* outcome, and also a degenerate
+    # axis — floor the span so the zero line stays visible instead of singular.
+    span = max(max((abs(v) for v in vals), default=0.0), 0.001)
+    ax_fid.set_xlim(-span * 1.6, span * 1.6)
+    ax_fid.set_xlabel("repaired CV score − clean CV score", fontsize=8)
+    ax_fid.set_title(
+        f"Score fidelity of repaired runs\n(mean |Δ| = "
+        f"{report['mean_abs_score_fidelity']})",
+        fontsize=10, fontweight="bold",
+    )
+    ax_fid.spines[["top", "right"]].set_visible(False)
+
+    fig.suptitle(
+        "CrewML — Day 20 self-repair: crashed generated code reads its own "
+        "traceback and comes back",
+        fontsize=12, fontweight="bold",
+    )
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path

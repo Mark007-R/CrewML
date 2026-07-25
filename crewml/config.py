@@ -51,6 +51,17 @@ EXECUTOR_SANDBOX = os.getenv("CREWML_EXECUTOR_SANDBOX", "1").lower() not in (
 # parent-side watchdog kills the direct child when its working set exceeds it.
 EXECUTOR_MEM_MB = int(os.getenv("CREWML_EXECUTOR_MEM_MB", "3072"))
 
+# --- Self-repair loop (Day 20) ---
+# Master switch: when generated code crashes, let the writing agent see the
+# traceback and try again. Per-node overrides: CREWML_TRAINER_SELF_REPAIR /
+# CREWML_FE_SELF_REPAIR. Off => the pre-Day-20 observe-and-degrade behaviour.
+SELF_REPAIR = os.getenv("CREWML_SELF_REPAIR", "1").lower() not in (
+    "0", "false", "off",
+)
+# Hard cap on repair attempts per failure (each attempt = one LLM call + one
+# sandboxed re-run). Timeouts/OOM kills are never repaired regardless.
+SELF_REPAIR_MAX_ATTEMPTS = int(os.getenv("CREWML_SELF_REPAIR_MAX_ATTEMPTS", "2"))
+
 # Per-dataset wall-clock budget for the Day 4 classical-AutoML ceiling (FLAML).
 # Held >= the crew's per-node executor timeout so beating AutoML is never an
 # artifact of handing the crew more compute (EVAL_PROTOCOL.md §4).
