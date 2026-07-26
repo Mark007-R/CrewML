@@ -246,6 +246,7 @@ def repair_loop(
                 _repair_user_prompt(current_code, current_error, context),
                 temperature=0.0,
                 max_tokens=max_tokens,
+                agent="self_repair",
             )
         except Exception as exc:  # provider down/rate-limited — record, stop
             entry.update(stage="llm", error=scrub(f"{type(exc).__name__}: {exc}"))

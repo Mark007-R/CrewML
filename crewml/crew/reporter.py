@@ -30,6 +30,7 @@ from __future__ import annotations
 import json
 from typing import Any, Optional
 
+from crewml import budget as budget_mod
 from crewml.config import ARTIFACTS_DIR
 
 REPORT_SCHEMA_VERSION = 1
@@ -166,12 +167,17 @@ def _collect_llm_usage(state: dict[str, Any]) -> dict[str, Any]:
 
 # --- Build the structured report --------------------------------------------
 
-def build_report(state: dict[str, Any]) -> dict[str, Any]:
+def build_report(state: dict[str, Any], *, run_budget: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     """Synthesise the final report from the crew's terminal state (pure, no I/O).
 
     Returns a JSON-serialisable dict summarising the run end-to-end: the data profile,
     the plan, the feature engineering, the training + Critic loop, the ensemble decision,
     and the honesty caveats a reader must see. Renders the model-card markdown too.
+
+    ``run_budget`` (Day 21) is the run's final budget-ledger snapshot — passed in by
+    :func:`run_reporter` so this function stays pure. It is surfaced verbatim under
+    ``report["run_budget"]``, and a budget that refused calls or stopped the loop
+    early becomes an explicit warning, never a silent degradation.
     """
     dataset_key = state["dataset_key"]
     metric = state.get("metric") or (state.get("plan") or {}).get("metric")
@@ -227,6 +233,24 @@ def build_report(state: dict[str, Any]) -> dict[str, Any]:
             "generation and was repaired before passing; provenance under "
             "fe_meta.repair."
         )
+    # Day 21: a budget that turned work away is disclosed, not buried in the ledger.
+    budget_stopped = any(
+        c.get("decision") == "finalize" and "run budget" in (c.get("reason") or "")
+        for c in critiques
+    )
+    if run_budget and (run_budget.get("n_refused") or budget_stopped):
+        refused = run_budget.get("n_refused") or 0
+        bits = []
+        if refused:
+            bits.append(f"{refused} LLM call(s) were refused by the run budget")
+        if budget_stopped:
+            bits.append("the Critic finalised early on budget grounds")
+        warnings.append(
+            "Run was BUDGET-CONSTRAINED: " + " and ".join(bits) +
+            f" (spent {run_budget.get('tokens_spent', 0)} tokens, "
+            f"{run_budget.get('elapsed_s', 0):.0f}s; full ledger under run_budget). "
+            "The result stands on whatever the budget allowed plus the deterministic core."
+        )
 
     report: dict[str, Any] = {
         "schema_version": REPORT_SCHEMA_VERSION,
@@ -279,6 +303,8 @@ def build_report(state: dict[str, Any]) -> dict[str, Any]:
         },
         "critic_passes": critic_passes,
         "llm_usage": llm_usage,
+        # Day 21: the run's final cost ledger (None when no budget was active).
+        "run_budget": run_budget,
         "warnings": warnings,
     }
     report["model_card_markdown"] = render_model_card(report)
@@ -410,8 +436,15 @@ def run_reporter(state: dict[str, Any]) -> dict[str, Any]:
     Returns the report dict (stored on the state). The markdown card and a
     narrative-free JSON copy are written under ``artifacts/crew/<dataset>/`` — git-ignored
     per-run artifacts, so the crew genuinely "writes the report" without polluting the repo.
+
+    As the crew's terminal node this is where the run's budget ledger (Day 21) is
+    read one final time — post-Ensembler, so the snapshot covers the whole run.
     """
-    report = build_report(state)
+    active_budget = budget_mod.active()
+    report = build_report(
+        state,
+        run_budget=active_budget.snapshot() if active_budget is not None else None,
+    )
 
     out_dir = ARTIFACTS_DIR / "crew" / state["dataset_key"]
     out_dir.mkdir(parents=True, exist_ok=True)

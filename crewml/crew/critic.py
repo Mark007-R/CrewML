@@ -47,6 +47,7 @@ import json
 import os
 from typing import Any, Optional
 
+from crewml import budget as run_budget_mod
 from crewml import config, llm
 
 CRITIQUE_SCHEMA_VERSION = 1
@@ -224,6 +225,32 @@ def diagnose(
 
 # --- Decision: iterate or finalize ------------------------------------------
 
+def _cannot_afford_next_pass(budget: dict[str, Any], iteration: int) -> Optional[str]:
+    """Why another pass is unaffordable under the run budget, or None if it is.
+
+    Estimates the next pass's cost as the *observed* mean cost of the passes so far
+    (spend / completed passes) — no assumed constants — separately for tokens and
+    wall-clock. Returns a short evidence string naming the binding dimension. With
+    no spend yet (e.g. a deterministic-only run: zero tokens, negligible time per
+    pass) the estimate is ~0 and every pass is affordable, so budget-awareness
+    never blocks a run that costs nothing.
+    """
+    passes = max(int(iteration), 1)
+    tokens_remaining = budget.get("tokens_remaining")
+    if tokens_remaining is not None:
+        est_tokens = budget.get("tokens_spent", 0) / passes
+        if est_tokens > 0 and tokens_remaining < est_tokens:
+            return (f"~{est_tokens:.0f} tokens/pass observed, "
+                    f"{tokens_remaining} remaining")
+    time_remaining = budget.get("time_remaining_s")
+    if time_remaining is not None:
+        est_time = budget.get("elapsed_s", 0.0) / passes
+        if est_time > 0 and time_remaining < est_time:
+            return (f"~{est_time:.0f}s/pass observed, "
+                    f"{time_remaining:.0f}s remaining")
+    return None
+
+
 def _prev_score(critiques_so_far: list[dict[str, Any]]) -> Optional[float]:
     """The winning CV score recorded by the most recent previous Critic pass, if any."""
     for c in reversed(critiques_so_far or []):
@@ -240,6 +267,7 @@ def decide(
     *,
     iteration: int,
     max_iterations: int,
+    budget: Optional[dict[str, Any]] = None,
 ) -> tuple[str, str, Optional[float]]:
     """Decide iterate vs finalize, with a reason and the score delta vs the last pass.
 
@@ -250,9 +278,19 @@ def decide(
     2. **Clean run** (no actionable findings) -> finalize; the crew is done.
     3. **Budget spent** (this pass reached ``max_iterations``) -> finalize; the router
        would force it anyway, but the Critic states it honestly.
-    4. **Diminishing returns** — there was a previous pass, the score did not improve by
+    4. **Run budget exhausted** (Day 21) — the run's token or wall-clock cap is spent
+       (``budget`` is the :meth:`crewml.budget.RunBudget.snapshot` for this run) ->
+       finalize gracefully with what we have; further LLM calls would be refused anyway.
+    5. **Run budget can't afford another pass** (Day 21) — remaining tokens/time are
+       below the observed per-pass cost so far -> finalize rather than start a pass
+       that would be cut off midway. Cost-per-pass is measured, not assumed: total
+       spend so far divided by the passes that produced it.
+    6. **Diminishing returns** — there was a previous pass, the score did not improve by
        ``SCORE_IMPROVE_EPS``, and no *new* issue was found this pass -> finalize.
-    5. Otherwise -> iterate; hand the Planner the findings' directives.
+    7. Otherwise -> iterate; hand the Planner the findings' directives.
+
+    Pure over its inputs — ``budget`` is a plain snapshot dict (or None, in which case
+    rules 4-5 are skipped and behaviour is exactly pre-Day-21).
     """
     cv_mean, _ = _winner_cv(training)
     prev = _prev_score(critiques_so_far)
@@ -267,6 +305,24 @@ def decide(
         return "finalize", "no actionable failure modes found — the run is clean, finalising", delta
     if int(iteration) >= int(max_iterations):
         return "finalize", f"iteration budget reached ({iteration}/{max_iterations}) — finalising", delta
+
+    if budget:
+        if budget.get("exhausted"):
+            return (
+                "finalize",
+                f"run budget exhausted ({budget.get('stop_reason')}; "
+                f"{run_budget_mod.brief(budget)}) — finalising gracefully with the current model",
+                delta,
+            )
+        unaffordable = _cannot_afford_next_pass(budget, iteration)
+        if unaffordable:
+            return (
+                "finalize",
+                f"run budget cannot afford another pass ({unaffordable}; "
+                f"{run_budget_mod.brief(budget)}) — finalising rather than starting a pass "
+                "that would be cut off",
+                delta,
+            )
 
     if prev is not None:
         prev_codes = set((critiques_so_far[-1].get("finding_codes") or []) if critiques_so_far else [])
@@ -294,6 +350,7 @@ def build_critique(
     critiques_so_far: list[dict[str, Any]],
     iteration: int,
     max_iterations: int,
+    budget: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """Compute the full deterministic critique for one Critic pass.
 
@@ -301,12 +358,14 @@ def build_critique(
     The returned dict is JSON-serialisable and carries both a Planner-facing ``findings``
     list (prose strings embedding the action keyword) and the structured ``diagnoses`` the
     reports render. ``cv_score`` + ``finding_codes`` are recorded so the *next* pass can
-    measure progress and detect diminishing returns.
+    measure progress and detect diminishing returns. ``budget`` is the run-budget
+    snapshot at this pass boundary (Day 21) — it feeds the decision and is embedded in
+    the critique so the loop's cost trajectory is inspectable pass by pass.
     """
     diagnoses = diagnose(profile, plan, training)
     decision, reason, delta = decide(
         diagnoses, training, critiques_so_far,
-        iteration=iteration, max_iterations=max_iterations,
+        iteration=iteration, max_iterations=max_iterations, budget=budget,
     )
     cv_mean, cv_std = _winner_cv(training)
 
@@ -331,6 +390,9 @@ def build_critique(
         "finding_codes": [d["code"] for d in diagnoses],
         "n_findings": len(diagnoses),
         "training_ok": bool(training.get("ok")),
+        # Run-budget snapshot at this pass boundary (Day 21); None when no budget
+        # is active, in which case the decision above ignored rules 4-5 entirely.
+        "budget": budget,
     }
 
 
@@ -373,6 +435,7 @@ def _llm_narrative(critique: dict[str, Any]) -> dict[str, Any]:
             "Review of this training pass (JSON):\n" + json.dumps(_narrative_payload(critique), default=str),
             temperature=0.0,
             max_tokens=400,
+            agent="critic",
         )
         return {
             "source": result.provider,
@@ -408,12 +471,20 @@ def run_critic(
     The deterministic verdict is always computed. An LLM review note is attached only
     when enabled *and* a live provider is configured; otherwise the critique records the
     narrative as ``unavailable`` and stands on its deterministic core.
+
+    Budget-awareness (Day 21): when a run budget is active its snapshot is taken at
+    this pass boundary and folded into the decision — an exhausted or unaffordable
+    budget finalises the run gracefully. The narrative call itself is also gated by
+    the budget (inside ``llm.chat``), so a spent budget degrades it to
+    ``unavailable`` like any other provider failure.
     """
+    active_budget = run_budget_mod.active()
     critique = build_critique(
         profile, plan, training,
         critiques_so_far=critiques_so_far or [],
         iteration=iteration,
         max_iterations=max_iterations,
+        budget=active_budget.snapshot() if active_budget is not None else None,
     )
 
     if _llm_enabled(with_llm) and not config.is_mock_mode():

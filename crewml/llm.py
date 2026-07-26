@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from crewml import config
+from crewml import budget, config
 
 
 class MockModeError(RuntimeError):
@@ -97,22 +97,41 @@ def chat(
     *,
     temperature: float = 0.0,
     max_tokens: int = 4096,
+    agent: str = "unspecified",
 ) -> LLMResult:
     """Send a system+user prompt to the configured provider and return the result.
 
     Raises :class:`MockModeError` in mock mode — callers must branch on
     :func:`crewml.config.is_mock_mode` before calling and provide an offline path.
+
+    When a run budget is active (:mod:`crewml.budget`, Day 21) the call is gated
+    on it *before* the network is touched — an exhausted budget raises
+    :class:`crewml.budget.BudgetExhaustedError`, which every caller already
+    degrades on gracefully — and charged to it after, under the caller's
+    ``agent`` label so the ledger can itemise the run's cost per agent. With no
+    active budget (unit tests, ad-hoc probes) behaviour is unchanged.
     """
     if config.is_mock_mode():
         raise MockModeError(
             "No LLM key configured (mock mode). Call is_mock_mode() first and take "
             "the offline path; mock output is never reported as a real result."
         )
+    run_budget = budget.active()
+    if run_budget is not None:
+        run_budget.enforce(agent=agent)  # raises BudgetExhaustedError when spent
     if config.LLM_PROVIDER == "groq":
-        return _chat_groq(system, user, temperature=temperature, max_tokens=max_tokens)
-    if config.LLM_PROVIDER in ("anthropic", "claude"):
-        return _chat_anthropic(system, user, temperature=temperature, max_tokens=max_tokens)
-    raise ValueError(f"unknown LLM provider {config.LLM_PROVIDER!r}")
+        result = _chat_groq(system, user, temperature=temperature, max_tokens=max_tokens)
+    elif config.LLM_PROVIDER in ("anthropic", "claude"):
+        result = _chat_anthropic(system, user, temperature=temperature, max_tokens=max_tokens)
+    else:
+        raise ValueError(f"unknown LLM provider {config.LLM_PROVIDER!r}")
+    if run_budget is not None:
+        run_budget.charge(
+            agent=agent,
+            prompt_tokens=result.prompt_tokens,
+            completion_tokens=result.completion_tokens,
+        )
+    return result
 
 
 _CODE_FENCE = re.compile(r"```(?:python|py)?\s*\n(.*?)```", re.DOTALL | re.IGNORECASE)

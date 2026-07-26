@@ -383,6 +383,7 @@ def _llm_narrative(profile: dict[str, Any]) -> dict[str, Any]:
             "Data profile (JSON):\n" + json.dumps(_narrative_payload(profile), default=str),
             temperature=0.0,
             max_tokens=512,
+            agent="profiler",
         )
         return {
             "source": result.provider,

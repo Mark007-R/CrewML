@@ -1,0 +1,167 @@
+{
+  "schema_version": 1,
+  "day": 21,
+  "dataset": "credit-g",
+  "max_iterations": 3,
+  "config_defaults": {
+    "token_budget": 200000,
+    "time_budget_s": 1800
+  },
+  "probe": {
+    "provider": "groq",
+    "model": "llama-3.3-70b-versatile",
+    "key_present": true,
+    "live": true,
+    "latency_s": 1.816,
+    "probe_tokens": 55,
+    "error": null
+  },
+  "scenarios": [
+    {
+      "scenario": "reference",
+      "token_budget": 200000,
+      "time_budget_s": 1800,
+      "crew_seconds": 29.26,
+      "iterations_run": 1,
+      "max_iterations": 3,
+      "final_decision": "finalize",
+      "final_reason": "no actionable failure modes found \u2014 the run is clean, finalising",
+      "budget_stopped_loop": false,
+      "n_refused": 0,
+      "budget_bound": false,
+      "tokens_spent": 2057,
+      "n_calls": 4,
+      "per_agent": {
+        "profiler": {
+          "calls": 1,
+          "tokens": 525,
+          "refused": 0
+        },
+        "planner": {
+          "calls": 1,
+          "tokens": 469,
+          "refused": 0
+        },
+        "feature_engineer": {
+          "calls": 1,
+          "tokens": 710,
+          "refused": 0
+        },
+        "critic": {
+          "calls": 1,
+          "tokens": 353,
+          "refused": 0
+        }
+      },
+      "elapsed_s_ledger": 29.25,
+      "stop_reason": null,
+      "llm_narratives_live": 4,
+      "llm_narratives_requested": 4,
+      "final_model_kind": "ensemble",
+      "cv_score": 0.794643,
+      "metric": "roc_auc",
+      "cv_score_is_holdout": false,
+      "budget_warning": null,
+      "holdout_untouched": true
+    },
+    {
+      "scenario": "tight_tokens",
+      "token_budget": 1200,
+      "time_budget_s": 1800,
+      "crew_seconds": 27.86,
+      "iterations_run": 1,
+      "max_iterations": 3,
+      "final_decision": "finalize",
+      "final_reason": "no actionable failure modes found \u2014 the run is clean, finalising",
+      "budget_stopped_loop": false,
+      "n_refused": 1,
+      "budget_bound": true,
+      "tokens_spent": 1710,
+      "n_calls": 3,
+      "per_agent": {
+        "profiler": {
+          "calls": 1,
+          "tokens": 525,
+          "refused": 0
+        },
+        "planner": {
+          "calls": 1,
+          "tokens": 474,
+          "refused": 0
+        },
+        "feature_engineer": {
+          "calls": 1,
+          "tokens": 711,
+          "refused": 0
+        },
+        "critic": {
+          "calls": 0,
+          "tokens": 0,
+          "refused": 1
+        }
+      },
+      "elapsed_s_ledger": 27.859,
+      "stop_reason": "tokens",
+      "llm_narratives_live": 3,
+      "llm_narratives_requested": 4,
+      "final_model_kind": "ensemble",
+      "cv_score": 0.794643,
+      "metric": "roc_auc",
+      "cv_score_is_holdout": false,
+      "budget_warning": "Run was BUDGET-CONSTRAINED: 1 LLM call(s) were refused by the run budget (spent 1710 tokens, 28s; full ledger under run_budget). The result stands on whatever the budget allowed plus the deterministic core.",
+      "holdout_untouched": true
+    },
+    {
+      "scenario": "tight_time",
+      "token_budget": 200000,
+      "time_budget_s": 10.0,
+      "crew_seconds": 28.36,
+      "iterations_run": 1,
+      "max_iterations": 3,
+      "final_decision": "finalize",
+      "final_reason": "no actionable failure modes found \u2014 the run is clean, finalising",
+      "budget_stopped_loop": false,
+      "n_refused": 1,
+      "budget_bound": true,
+      "tokens_spent": 1704,
+      "n_calls": 3,
+      "per_agent": {
+        "profiler": {
+          "calls": 1,
+          "tokens": 525,
+          "refused": 0
+        },
+        "planner": {
+          "calls": 1,
+          "tokens": 469,
+          "refused": 0
+        },
+        "feature_engineer": {
+          "calls": 1,
+          "tokens": 710,
+          "refused": 0
+        },
+        "critic": {
+          "calls": 0,
+          "tokens": 0,
+          "refused": 1
+        }
+      },
+      "elapsed_s_ledger": 28.359,
+      "stop_reason": "time",
+      "llm_narratives_live": 3,
+      "llm_narratives_requested": 4,
+      "final_model_kind": "ensemble",
+      "cv_score": 0.794643,
+      "metric": "roc_auc",
+      "cv_score_is_holdout": false,
+      "budget_warning": "Run was BUDGET-CONSTRAINED: 1 LLM call(s) were refused by the run budget (spent 1704 tokens, 28s; full ledger under run_budget). The result stands on whatever the budget allowed plus the deterministic core.",
+      "holdout_untouched": true
+    }
+  ],
+  "notes": [
+    "Scores are CV estimates on train (cv_score_is_holdout: false); the sealed holdout was verified untouched after every scenario.",
+    "A budget-starved run is not a mock run: zero live narratives beside a non-zero n_refused is the enforcement working, and is labelled as such.",
+    "Grid search was disabled (CREWML_TRAINER_PARAM_SEARCH=0) for every scenario so wall-clock differences come from LLM calls and CV, not the search grid."
+  ]
+}

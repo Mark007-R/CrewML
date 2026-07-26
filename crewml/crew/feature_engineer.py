@@ -385,6 +385,7 @@ def _generate_llm_fe(
             _fe_user_prompt(plan, critique),
             temperature=0.0,
             max_tokens=1024,
+            agent="feature_engineer",
         )
         return {
             "ok": True,

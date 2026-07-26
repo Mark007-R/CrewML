@@ -62,8 +62,9 @@ class DerivedArtifact:
 
 def _markdown_artifacts() -> list[DerivedArtifact]:
     from crewml import (
-        ablation, agent_ablation, comparison, failure_taxonomy, iteration_depth,
-        leaderboard, phase3_results, provider_study, self_repair_study,
+        ablation, agent_ablation, budget_study, comparison, failure_taxonomy,
+        iteration_depth, leaderboard, phase3_results, provider_study,
+        self_repair_study,
     )
 
     specs = [
@@ -91,6 +92,9 @@ def _markdown_artifacts() -> list[DerivedArtifact]:
          RESULTS_DIR / "day20_self_repair.json",
          self_repair_study.render_table_md,
          "Day 20 self-repair table — shipped as '2/2' against an 18/18 JSON"),
+        (budget_study.BUDGET_STUDY_MD_PATH,
+         RESULTS_DIR / "day21_budget_study.json",
+         budget_study.render_markdown, "Day 21 run-budget study"),
     ]
     return [
         DerivedArtifact(path=p, source=s, kind="markdown", render=r, why=w)

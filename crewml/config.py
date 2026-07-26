@@ -40,7 +40,12 @@ ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5")
 # --- Run budgets ---
 MAX_ITERATIONS = int(os.getenv("CREWML_MAX_ITERATIONS", "3"))
 EXECUTOR_TIMEOUT_S = int(os.getenv("CREWML_EXECUTOR_TIMEOUT_S", "120"))
+# Per-run LLM token cap and wall-clock cap, enforced by crewml.budget (Day 21):
+# every llm.chat call is gated on the active RunBudget pre-call and charged to it
+# after; the Critic finalises early when a cap is spent or unaffordable. <= 0
+# means uncapped. (The token budget existed since Day 5 but was unenforced.)
 RUN_TOKEN_BUDGET = int(os.getenv("CREWML_RUN_TOKEN_BUDGET", "200000"))
+RUN_TIME_BUDGET_S = int(os.getenv("CREWML_RUN_TIME_BUDGET_S", "1800"))
 
 # --- Executor sandbox (Day 19 hardening) ---
 # On by default; CREWML_EXECUTOR_SANDBOX=0 is the explicit escape hatch.

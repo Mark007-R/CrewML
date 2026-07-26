@@ -570,6 +570,7 @@ def _llm_narrative(plan: dict[str, Any]) -> dict[str, Any]:
             "Modeling plan (JSON):\n" + json.dumps(_narrative_payload(plan), default=str),
             temperature=0.0,
             max_tokens=512,
+            agent="planner",
         )
         return {
             "source": result.provider,

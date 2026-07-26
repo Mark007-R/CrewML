@@ -46,6 +46,7 @@ import time
 from contextlib import contextmanager
 from typing import Any, Iterable, Optional
 
+from crewml import budget as budget_mod
 from crewml.config import ARTIFACTS_DIR, MAX_ITERATIONS, RESULTS_DIR, is_mock_mode
 from crewml.crew import build_crew, initial_state
 from crewml.datasets import REGISTRY, load_manifest, verify_holdout_untouched
@@ -139,7 +140,11 @@ def run_variant(
     app = build_crew(variant=variant)
     state = initial_state(spec, max_iterations=max_iterations)
     limit = 3 + max_iterations * 4 + 10
-    final = app.invoke(state, config={"recursion_limit": limit})
+    # Every study run is scoped under a fresh run budget (Day 21, config-default
+    # caps) so a runaway variant is cost-bounded like a production run; the
+    # committed record schema is unchanged — the ledger lives in the run's report.
+    with budget_mod.run_budget():
+        final = app.invoke(state, config={"recursion_limit": limit})
     crew_seconds = time.time() - started
 
     # Seal must be intact before scoring — proves the variant never touched the holdout.

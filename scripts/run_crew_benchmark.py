@@ -50,6 +50,7 @@ for _stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):  # already-wrapped or non-reconfigurable stream
         pass
 
+from crewml import budget as budget_mod
 from crewml import charts
 from crewml.comparison import CREW_HOLDOUT_PATH, render_markdown, write_comparison
 from crewml.config import ARTIFACTS_DIR, MAX_ITERATIONS, is_mock_mode
@@ -71,7 +72,9 @@ def _run_and_score(key: str, manifest: dict, *, max_iterations: int) -> dict:
     app = build_crew()
     state = initial_state(spec, max_iterations=max_iterations)
     limit = 3 + max_iterations * 4 + 10
-    final = app.invoke(state, config={"recursion_limit": limit})
+    # Per-dataset run budget (Day 21): config-default token/wall-clock caps.
+    with budget_mod.run_budget():
+        final = app.invoke(state, config={"recursion_limit": limit})
     crew_seconds = time.time() - started
 
     # Seal must be intact *before* we score — proves the crew itself never touched it.
