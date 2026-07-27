@@ -30,9 +30,21 @@ Two honesty/robustness disciplines carry over from the Profiler and Planner:
 features must be a function of a single row's own values — no fitting, no target,
 no cross-row aggregation. Under that contract, computing features once on the whole
 train frame is identical to computing them fold-by-fold, so the Trainer can apply
-FE up front without leaking across CV folds (EVAL_PROTOCOL §3). The validation
-rejects any source that references the target column; the contract is stated in the
-prompt and enforced structurally where it can be.
+FE up front without leaking across CV folds (EVAL_PROTOCOL §3). Until Day 22 the
+contract was stated in the prompt but only partially enforced; the validation
+harness now *tests* it — and screens for the leakage the crew could introduce:
+
+* **Row-wise enforcement**: ``add_features`` is run a second time on every other
+  row of the frame. A row-wise, stateless transform gives identical values for
+  those rows; anything fitted across rows (means, ranks, quantile bins, target
+  encoding) gives different ones and is rejected. This is exactly the property
+  that makes whole-frame FE fold-safe, so the check *is* the contract.
+* **Engineered-column leakage screen**: each new column is scored with the same
+  calibrated single-feature CV screen the Profiler runs (:mod:`crewml.leakage`,
+  inlined — the sandbox cannot import ``crewml``). A feature that standalone-
+  predicts the target above the metric's ceiling is a leak the crew just built
+  (e.g. derived from a leaky column the plan failed to drop) and the code is
+  rejected, feeding the usual repair → default-fallback ladder.
 
 **Train only, structurally.** This module reasons over the plan dict and validates
 against the *train* split alone (via the executor, which is handed only
@@ -41,16 +53,20 @@ asserts it — so the no-peeking invariant is a property of the code.
 """
 from __future__ import annotations
 
+import json
 import os
 import textwrap
 from typing import Any, Optional
 
 from crewml import config, llm
-from crewml.datasets import train_path
+from crewml.datasets import REGISTRY, train_path
 from crewml.executor import run_code
+from crewml.leakage import SINGLE_FEATURE_CEILING
 from crewml.repair import repair_enabled_for_fe, repair_loop
 
-FE_SCHEMA_VERSION = 2  # v2 (Day 20): + "llm_repaired" source and "repair" provenance
+FE_SCHEMA_VERSION = 3  # v3 (Day 22): validation now enforces the row-wise contract
+#                        and screens engineered columns for target leakage
+#                        (v2, Day 20: + "llm_repaired" source and "repair" provenance)
 
 # The engineered-column name the deterministic default contributes. Kept as a
 # constant so the report and tests can name it without magic strings.
@@ -219,6 +235,8 @@ _VALIDATION_HARNESS = textwrap.dedent(
     add_features() to the TRAIN feature frame and reports whether it honours the
     contract. Never scores anything; never touches the held-out split.
     """
+    import json
+
     import numpy as np
     import pandas as pd
     from pandas.api.types import is_numeric_dtype
@@ -226,8 +244,12 @@ _VALIDATION_HARNESS = textwrap.dedent(
     from crew_io import emit_metrics, input_path
 
     TARGET = "target"
+    # Task/metric + the calibrated leakage ceiling, spliced in by the parent
+    # (mirrors crewml.leakage — the sandbox cannot import crewml by design).
+    LEAK_CFG = json.loads(r"""#<<LEAK_CFG>>""")
 
     df = pd.read_parquet(input_path("train.parquet"))
+    y_train = df[TARGET] if TARGET in df.columns else None
     if TARGET in df.columns:
         df = df.drop(columns=[TARGET])
 
@@ -263,8 +285,69 @@ _VALIDATION_HARNESS = textwrap.dedent(
     # at the validation gate means such code never reaches the Trainer at all.
     no_infinities = not any(_has_inf(c) for c in new_cols)
 
+    # --- Row-wise contract enforcement (Day 22) -------------------------------
+    # The Trainer applies FE once, before CV. That is fold-safe iff the transform
+    # is row-wise and stateless: each row's features depend on that row alone.
+    # The test IS the property: re-run add_features on every other row — a
+    # conforming transform reproduces identical values for those rows; anything
+    # fitted across rows (means, ranks, qcut bins, target encoding) does not.
+    def _same_values(a, b):
+        av = pd.to_numeric(a, errors="coerce").to_numpy(dtype="float64")
+        bv = pd.to_numeric(b, errors="coerce").to_numpy(dtype="float64")
+        return bool(np.allclose(av, bv, rtol=1e-9, atol=1e-12, equal_nan=True))
+
+    row_wise_ok = True
+    if new_cols and n_in >= 4:
+        half = df.iloc[::2]
+        try:
+            out_half = add_features(half.copy())
+            row_wise_ok = all(
+                c in out_half.columns
+                and _same_values(out.loc[half.index, c], out_half[c])
+                for c in new_cols
+            )
+        except Exception:  # the contract also says: never raise
+            row_wise_ok = False
+
+    # --- Engineered-column leakage screen (Day 22) ----------------------------
+    # The same calibrated single-feature CV screen the Profiler runs on the raw
+    # columns, applied to what the FE just built: a new column that standalone-
+    # predicts the target above the metric's ceiling is leakage the crew
+    # introduced (e.g. derived from a column the plan was told to drop).
+    leakage_scores = {}
+    leaky_columns = []
+    ceiling = LEAK_CFG.get("ceiling")
+    if new_cols and ceiling is not None and y_train is not None:
+        from sklearn.model_selection import KFold, StratifiedKFold, cross_val_score
+        from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+
+        seed = int(LEAK_CFG["seed"])
+        for c in new_cols:
+            X1 = pd.to_numeric(out[c], errors="coerce").to_frame().to_numpy(dtype="float64")
+            X1 = np.nan_to_num(X1, nan=-999.0, posinf=-999.0, neginf=-999.0)
+            if LEAK_CFG["task"] == "classification":
+                model = DecisionTreeClassifier(max_depth=3, random_state=seed)
+                cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=seed)
+                target = pd.factorize(y_train)[0]
+                scoring = "roc_auc" if LEAK_CFG["metric"] == "roc_auc" else "f1_macro"
+            else:
+                model = DecisionTreeRegressor(max_depth=3, random_state=seed)
+                cv = KFold(n_splits=3, shuffle=True, random_state=seed)
+                target = y_train.to_numpy(dtype="float64")
+                scoring = "r2"
+            try:
+                score = float(np.mean(cross_val_score(model, X1, target, cv=cv, scoring=scoring)))
+            except Exception:
+                continue  # unscoreable is not evidence of leakage
+            if np.isfinite(score):
+                leakage_scores[c] = round(score, 6)
+                if score >= ceiling:
+                    leaky_columns.append(c)
+    no_leakage = not leaky_columns
+
     emit_metrics(
-        ok=bool(original_preserved and rows_preserved and all_numeric and no_infinities),
+        ok=bool(original_preserved and rows_preserved and all_numeric
+                and no_infinities and row_wise_ok and no_leakage),
         n_rows_in=int(n_in),
         n_rows_out=int(len(out)),
         new_columns=list(new_cols),
@@ -275,6 +358,11 @@ _VALIDATION_HARNESS = textwrap.dedent(
         all_new_have_values=bool(all_new_have_values),
         no_infinities=bool(no_infinities),
         infinite_columns=[c for c in new_cols if _has_inf(c)],
+        row_wise_ok=bool(row_wise_ok),
+        no_leakage=bool(no_leakage),
+        leaky_columns=list(leaky_columns),
+        leakage_scores=leakage_scores,
+        leakage_ceiling=ceiling,
     )
     print("FE_VALIDATION_OK", flush=True)
     '''
@@ -287,9 +375,24 @@ def _validate_fe(fe_source: str, dataset_key: str, *, timeout_s: int = 60) -> di
     Returns a JSON-friendly dict: ``ok`` plus the observed row/column facts (or the
     executor error on a crash). Never raises for *code* failures — a broken
     ``add_features`` is reported as ``ok: False``, not an exception.
+
+    Day 22: the harness also enforces the row-wise contract and screens the
+    engineered columns for target leakage, using the calibrated ceiling for the
+    dataset's primary metric (spliced in — the sandbox cannot import crewml).
+    A dataset key without a registry entry gets no leakage ceiling (recorded as
+    ``leakage_ceiling: None`` in the verdict, screen skipped); every registered
+    dataset — including probe datasets — is screened.
     """
-    # The marker sits at module level (0 indent) after dedent — splice as-is.
-    harness = _VALIDATION_HARNESS.replace("#<<FE_SOURCE>>", fe_source)
+    spec = REGISTRY.get(dataset_key)
+    leak_cfg = {
+        "task": spec.task if spec else None,
+        "metric": spec.metric if spec else None,
+        "ceiling": SINGLE_FEATURE_CEILING.get(spec.metric) if spec else None,
+        "seed": config.SEED,
+    }
+    # The markers sit at module level (0 indent) after dedent — splice as-is.
+    harness = _VALIDATION_HARNESS.replace("#<<LEAK_CFG>>", json.dumps(leak_cfg))
+    harness = harness.replace("#<<FE_SOURCE>>", fe_source)
     result = run_code(
         harness,
         inputs={"train.parquet": train_path(dataset_key)},
@@ -308,6 +411,8 @@ def _validate_fe(fe_source: str, dataset_key: str, *, timeout_s: int = 60) -> di
                 "n_rows_in", "n_rows_out", "new_columns", "n_new",
                 "original_preserved", "rows_preserved", "all_numeric",
                 "all_new_have_values", "no_infinities", "infinite_columns",
+                "row_wise_ok", "no_leakage", "leaky_columns",
+                "leakage_scores", "leakage_ceiling",
             )}
         )
     else:
@@ -325,23 +430,41 @@ def _verdict_error(verdict: dict[str, Any]) -> str:
         check
         for check in (
             "original_preserved", "rows_preserved", "all_numeric",
-            "all_new_have_values", "no_infinities",
+            "all_new_have_values", "no_infinities", "row_wise_ok", "no_leakage",
         )
         if verdict.get(check) is False
     ]
     detail = ""
     if verdict.get("no_infinities") is False:
         bad = verdict.get("infinite_columns") or []
-        detail = (
+        detail += (
             f" The column(s) {bad} contain +/-inf — guard every division and log "
             "with a safe denominator; NaN is acceptable but infinity is not."
+        )
+    if verdict.get("row_wise_ok") is False:
+        detail += (
+            " The engineered columns are not row-wise/stateless: recomputing them "
+            "on a subset of rows changed their values, which leaks information "
+            "across CV folds. Remove anything fitted across rows — means, ranks, "
+            "quantile bins (qcut), group aggregates, target encoding — and use "
+            "only each row's own values with fixed constants."
+        )
+    if verdict.get("no_leakage") is False:
+        bad = verdict.get("leaky_columns") or []
+        scores = verdict.get("leakage_scores") or {}
+        named = ", ".join(f"{c} (standalone CV {scores.get(c)})" for c in bad)
+        detail += (
+            f" The engineered column(s) [{named}] predict the target on their own "
+            f"above the leakage ceiling ({verdict.get('leakage_ceiling')}) — that "
+            "is target leakage the features introduced. Do not derive features "
+            "from suspected-leaky columns; drop those derivations entirely."
         )
     return (
         "add_features ran but broke the contract: "
         + (", ".join(f"{c}=False" for c in broken) or "validation reported not-ok")
         + ". Every original column and the row order/index must be preserved and "
-        "every engineered column must be numeric, finite, and have at least one "
-        "non-null value." + detail
+        "every engineered column must be numeric, finite, row-wise/stateless, "
+        "leakage-free, and have at least one non-null value." + detail
     )
 
 

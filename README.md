@@ -100,10 +100,14 @@ Built in the open over 30 days. Every committed run leaves its numbers in
   default on the **locked holdout**, plus per-agent ablations, an iteration-depth study,
   a provider study and a failure taxonomy
 - Phase 4 — Hardening & Safety (Days 19–23) ← **in progress**: a real executor sandbox
-  (Day 19 — import allowlist, no network egress, filesystem jail, resource caps) and a
+  (Day 19 — import allowlist, no network egress, filesystem jail, resource caps), a
   self-repair loop that recovers crashed generated code (Day 20 — 18/18 injected faults
-  recovered live, every one on the first attempt). Budgets, leakage/honesty guards and
-  reproducibility are Days 21–23.
+  recovered live, every one on the first attempt), enforced per-run token/time budgets
+  with a budget-aware Critic (Day 21), and leakage & honesty guards (Day 22 — a
+  calibrated single-feature screen that closes the leak-detection window Day 17
+  measured, row-wise/leakage enforcement on generated FE code, and runtime no-peeking
+  probes; see `results/day22_leakage_honesty.md`). Reproducibility wraps the phase
+  (Day 23).
 - Phase 5 — Production Wrapper (Days 24–27)
 - Phase 6 — Ship (Days 28–30)
 

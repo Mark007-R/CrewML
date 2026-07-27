@@ -35,6 +35,7 @@ import pandas as pd
 
 from crewml import config, llm
 from crewml.datasets import REGISTRY, TARGET_COLUMN, DatasetSpec, load_train
+from crewml.leakage import screen_features
 
 PROFILE_SCHEMA_VERSION = 1
 
@@ -200,6 +201,11 @@ def _leakage_checks(
     ]
 
     # Near-perfect single-feature predictors of the target => leakage suspects.
+    # Two layers (Day 22): the fast Phase-2 screens (Pearson / group purity)
+    # catch the blatant copies, then the calibrated single-feature CV screen
+    # (crewml.leakage) catches the "implausibly strong but not perfect" band
+    # Day 17 measured slipping through — a 95%-agreement leak scores ~0.95
+    # standalone AUC, far above any legitimate feature in the locked suite.
     target_leaks: list[dict[str, Any]] = []
     if spec.task == "regression":
         for c in numeric:
@@ -219,6 +225,14 @@ def _leakage_checks(
             purity = _classification_purity(X[c], y)
             if purity is not None and purity >= LEAKAGE_PURITY and (purity - majority_rate) >= LEAKAGE_PURITY_LIFT:
                 target_leaks.append({"column": c, "measure": "target_purity", "signal": _f(purity)})
+
+    # The Day-22 layer: calibrated standalone-CV screen over everything the fast
+    # screens didn't already flag (ids/constants excluded — a unique id scores at
+    # chance out-of-fold anyway, and a constant can't split).
+    already = {d["column"] for d in target_leaks} | set(id_like) | set(constant)
+    target_leaks.extend(
+        screen_features(X, y, spec.task, spec.metric, skip=frozenset(already))
+    )
 
     return {
         "constant_columns": constant,

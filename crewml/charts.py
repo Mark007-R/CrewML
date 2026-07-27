@@ -841,3 +841,63 @@ def plot_self_repair(report: dict, path: Path = SELF_REPAIR_CHART_PATH) -> Path:
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return path
+
+
+LEAKAGE_WINDOW_CHART_PATH = CHARTS_DIR / "day22_leakage_window.png"
+
+
+def plot_leakage_window(report: dict, path: Path = LEAKAGE_WINDOW_CHART_PATH) -> Path:
+    """The Day-22 detection-window figure: one panel per metric, showing where
+    the calibrated single-feature ceiling sits between the strongest *legitimate*
+    feature (must stay below it — no false positives) and every *injected* leak
+    (must land above it — no misses). The gap between the two bands IS the
+    residual window, drawn rather than hidden: a leak engineered inside it would
+    still pass, which is exactly what the study's markdown discloses.
+    """
+    cal = report["calibration"]
+    metrics = list(cal["ceilings"].keys())
+    fig, axes = plt.subplots(1, len(metrics), figsize=(4.2 * len(metrics), 4.4))
+    if len(metrics) == 1:
+        axes = [axes]
+
+    for ax, metric in zip(axes, metrics):
+        ceiling = cal["ceilings"][metric]
+        clean = [
+            (key, d["strongest_feature"], d["strongest_score"])
+            for key, d in cal["clean_suite"].items() if d["metric"] == metric
+        ]
+        leaks = [d for d in cal["injected_leaks"] if d["metric"] == metric]
+
+        labels, values, colours = [], [], []
+        for key, feat, score in clean:
+            labels.append(f"{key}\n{feat} (clean max)")
+            values.append(score)
+            colours.append(SYSTEM_COLOURS["default_rf"])
+        for d in leaks:
+            labels.append(f"{d['base_dataset']}\nleak/{d['kind']}")
+            values.append(d["standalone_score"])
+            colours.append(LOSS_COLOUR)
+
+        pos = range(len(labels))
+        ax.bar(pos, values, color=colours, width=0.62)
+        ax.axhline(ceiling, color="#222222", linestyle="--", linewidth=1.2)
+        ax.text(len(labels) - 0.45, ceiling, f" ceiling {ceiling}", va="bottom",
+                ha="right", fontsize=8, fontweight="bold")
+        ax.set_xticks(list(pos))
+        ax.set_xticklabels(labels, fontsize=7)
+        ax.set_title(metric, fontsize=10, fontweight="bold")
+        ax.set_ylim(0, 1.05)
+        ax.grid(axis="y", alpha=0.25)
+        for p, v in zip(pos, values):
+            ax.text(p, v + 0.012, f"{v:.3f}", ha="center", fontsize=7)
+
+    fig.suptitle(
+        "CrewML — Day 22 single-feature leakage screen: clean features stay under "
+        "the calibrated ceiling, injected leaks land above it",
+        fontsize=11, fontweight="bold",
+    )
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path
