@@ -99,16 +99,19 @@ Built in the open over 30 days. Every committed run leaves its numbers in
 - **Phase 3 — Comparison Studies** (Days 12–18) ✓ complete · crew vs solo vs AutoML vs
   default on the **locked holdout**, plus per-agent ablations, an iteration-depth study,
   a provider study and a failure taxonomy
-- Phase 4 — Hardening & Safety (Days 19–23) ← **in progress**: a real executor sandbox
+- Phase 4 — Hardening & Safety (Days 19–23) ✅ **complete**: a real executor sandbox
   (Day 19 — import allowlist, no network egress, filesystem jail, resource caps), a
   self-repair loop that recovers crashed generated code (Day 20 — 18/18 injected faults
   recovered live, every one on the first attempt), enforced per-run token/time budgets
-  with a budget-aware Critic (Day 21), and leakage & honesty guards (Day 22 — a
+  with a budget-aware Critic (Day 21), leakage & honesty guards (Day 22 — a
   calibrated single-feature screen that closes the leak-detection window Day 17
   measured, row-wise/leakage enforcement on generated FE code, and runtime no-peeking
-  probes; see `results/day22_leakage_honesty.md`). Reproducibility wraps the phase
-  (Day 23).
-- Phase 5 — Production Wrapper (Days 24–27)
+  probes; see `results/day22_leakage_honesty.md`), and reproducibility (Day 23 — a
+  per-run manifest pinning seed/splits/versions/provider plus a result fingerprint;
+  measured across fresh processes: the deterministic core reproduces bit-identically,
+  the seed provably reaches the model, and live-LLM divergence is recorded and
+  attributable rather than promised away; see `results/day23_reproducibility.md`).
+- Phase 5 — Production Wrapper (Days 24–27) ← **next**
 - Phase 6 — Ship (Days 28–30)
 
 ## License

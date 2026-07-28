@@ -63,8 +63,8 @@ class DerivedArtifact:
 def _markdown_artifacts() -> list[DerivedArtifact]:
     from crewml import (
         ablation, agent_ablation, budget_study, comparison, failure_taxonomy,
-        iteration_depth, leaderboard, phase3_results, provider_study,
-        self_repair_study,
+        iteration_depth, leaderboard, leakage_study, phase3_results,
+        provider_study, repro_study, self_repair_study,
     )
 
     specs = [
@@ -95,6 +95,14 @@ def _markdown_artifacts() -> list[DerivedArtifact]:
         (budget_study.BUDGET_STUDY_MD_PATH,
          RESULTS_DIR / "day21_budget_study.json",
          budget_study.render_markdown, "Day 21 run-budget study"),
+        (leakage_study.REPORT_MD_PATH,
+         RESULTS_DIR / "day22_leakage_honesty.json",
+         leakage_study.render_markdown,
+         "Day 22 leakage board — shipped UNREGISTERED on Day 22; the sweep "
+         "test caught it, which is this registry working as designed"),
+        (repro_study.REPORT_MD_PATH,
+         RESULTS_DIR / "day23_reproducibility.json",
+         repro_study.render_markdown, "Day 23 reproducibility study"),
     ]
     return [
         DerivedArtifact(path=p, source=s, kind="markdown", render=r, why=w)
@@ -127,6 +135,10 @@ def _chart_artifacts() -> list[DerivedArtifact]:
          charts.plot_phase3_summary, "Day 18 chart"),
         (charts.SELF_REPAIR_CHART_PATH, RESULTS_DIR / "day20_self_repair.json",
          charts.plot_self_repair, "Day 20 chart"),
+        (charts.LEAKAGE_WINDOW_CHART_PATH,
+         RESULTS_DIR / "day22_leakage_honesty.json",
+         charts.plot_leakage_window,
+         "Day 22 window chart — shipped unregistered; caught by the sweep"),
     ]
     return [
         DerivedArtifact(path=p, source=s, kind="chart", render=r, why=w)

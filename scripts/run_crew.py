@@ -35,6 +35,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from crewml import budget as budget_mod
+from crewml import manifest as manifest_mod
 from crewml.config import ARTIFACTS_DIR, MAX_ITERATIONS, RESULTS_DIR, is_mock_mode
 from crewml.crew import build_crew, initial_state
 from crewml.datasets import REGISTRY, verify_holdout_untouched
@@ -149,6 +150,9 @@ def main() -> int:
         out_dir = ARTIFACTS_DIR / "crew" / k
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "final_run.json").write_text(json.dumps(final, indent=2, default=str))
+        # Day 23: pin + fingerprint the run so a re-run is checkable, not anecdotal.
+        m = manifest_mod.write_run_manifest(final, out_dir / "run_manifest.json")
+        rec["result_fingerprint"] = m["result_fingerprint"]
 
         # Commit the primary dataset's model card as an inspectable sample deliverable.
         if k == keys[0]:
