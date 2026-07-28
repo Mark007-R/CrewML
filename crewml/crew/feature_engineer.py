@@ -21,16 +21,30 @@ Two honesty/robustness disciplines carry over from the Profiler and Planner:
   it for dataset-specific ``add_features`` code, then **executes that code in the
   sandbox** on the train split. Only if it runs cleanly, preserves the row count
   and index, keeps every original column, and adds *numeric* columns is it
-  trusted; otherwise the agent records the reason and falls back to the default.
-  An LLM never contributes an *unvalidated* line of code to a real run.
+  trusted; otherwise the agent records the reason and — since Day 20 — hands the
+  failed verdict to the :mod:`crewml.repair` loop for a bounded second chance
+  before falling back to the default. An LLM never contributes an *unvalidated*
+  line of code to a real run; repaired code passes the same gate as any other.
 
 **The row-wise contract (why applying FE before CV is leakage-free).** Engineered
 features must be a function of a single row's own values — no fitting, no target,
 no cross-row aggregation. Under that contract, computing features once on the whole
 train frame is identical to computing them fold-by-fold, so the Trainer can apply
-FE up front without leaking across CV folds (EVAL_PROTOCOL §3). The validation
-rejects any source that references the target column; the contract is stated in the
-prompt and enforced structurally where it can be.
+FE up front without leaking across CV folds (EVAL_PROTOCOL §3). Until Day 22 the
+contract was stated in the prompt but only partially enforced; the validation
+harness now *tests* it — and screens for the leakage the crew could introduce:
+
+* **Row-wise enforcement**: ``add_features`` is run a second time on every other
+  row of the frame. A row-wise, stateless transform gives identical values for
+  those rows; anything fitted across rows (means, ranks, quantile bins, target
+  encoding) gives different ones and is rejected. This is exactly the property
+  that makes whole-frame FE fold-safe, so the check *is* the contract.
+* **Engineered-column leakage screen**: each new column is scored with the same
+  calibrated single-feature CV screen the Profiler runs (:mod:`crewml.leakage`,
+  inlined — the sandbox cannot import ``crewml``). A feature that standalone-
+  predicts the target above the metric's ceiling is a leak the crew just built
+  (e.g. derived from a leaky column the plan failed to drop) and the code is
+  rejected, feeding the usual repair → default-fallback ladder.
 
 **Train only, structurally.** This module reasons over the plan dict and validates
 against the *train* split alone (via the executor, which is handed only
@@ -39,15 +53,20 @@ asserts it — so the no-peeking invariant is a property of the code.
 """
 from __future__ import annotations
 
+import json
 import os
 import textwrap
 from typing import Any, Optional
 
 from crewml import config, llm
-from crewml.datasets import train_path
+from crewml.datasets import REGISTRY, train_path
 from crewml.executor import run_code
+from crewml.leakage import SINGLE_FEATURE_CEILING
+from crewml.repair import repair_enabled_for_fe, repair_loop
 
-FE_SCHEMA_VERSION = 1
+FE_SCHEMA_VERSION = 3  # v3 (Day 22): validation now enforces the row-wise contract
+#                        and screens engineered columns for target leakage
+#                        (v2, Day 20: + "llm_repaired" source and "repair" provenance)
 
 # The engineered-column name the deterministic default contributes. Kept as a
 # constant so the report and tests can name it without magic strings.
@@ -149,9 +168,37 @@ _FE_SYSTEM_PROMPT = textwrap.dedent(
 )
 
 
-def _fe_user_prompt(plan: dict[str, Any]) -> str:
+# Which Critic findings are the Feature Engineer's business. `leak` is the one that
+# most needs FE's attention — the Planner can only re-audit column drops, while an
+# engineered feature derived from the target can only be removed by whoever writes
+# the FE code. `overfit` matters because gratuitous features widen fold variance.
+_FE_RELEVANT_CODES: frozenset[str] = frozenset({"leakage", "overfit", "wrong_metric"})
+
+
+def _critique_directives(critique: Optional[dict[str, Any]]) -> list[str]:
+    """The FE-addressed directives from a critique, newest pass only.
+
+    Reads ``diagnoses`` — the Critic's *structured* findings. Note that
+    ``critique["findings"]`` is a list of pre-rendered **strings** for the Planner,
+    not dicts; reading that key instead raises ``AttributeError`` on a real looped
+    run. Tolerates either shape so a caller passing the structured list directly
+    (as tests do) also works.
+    """
+    if not critique:
+        return []
+    entries = critique.get("diagnoses") or critique.get("findings") or []
+    return [
+        d["directive"]
+        for d in entries
+        if isinstance(d, dict)
+        and d.get("code") in _FE_RELEVANT_CODES
+        and d.get("directive")
+    ]
+
+
+def _fe_user_prompt(plan: dict[str, Any], critique: Optional[dict[str, Any]] = None) -> str:
     pre = plan["preprocessing"]
-    return textwrap.dedent(
+    base = textwrap.dedent(
         f"""\
         Dataset: {plan['dataset_key']} — task {plan['task']} ({plan['subtype']}),
         optimising {plan['metric']}.
@@ -164,6 +211,20 @@ def _fe_user_prompt(plan: dict[str, Any]) -> str:
         this shape. Return only the code.
         """
     )
+    # Day 10 promised the Critic's instructions feed back to "Planner/FE", but only
+    # the Planner was ever wired up: on a looped pass the FE regenerated from the
+    # plan alone and could re-introduce the very feature the Critic objected to.
+    directives = _critique_directives(critique)
+    if not directives:
+        return base
+    joined = "\n".join(f"- {d}" for d in directives)
+    return base + textwrap.dedent(
+        f"""
+        A previous pass was CRITIQUED. Address these findings in the features you
+        write this time — do not re-introduce what they object to:
+        {joined}
+        """
+    )
 
 
 # --- Sandbox smoke validation (the trust gate for generated code) -----------
@@ -174,14 +235,21 @@ _VALIDATION_HARNESS = textwrap.dedent(
     add_features() to the TRAIN feature frame and reports whether it honours the
     contract. Never scores anything; never touches the held-out split.
     """
+    import json
+
+    import numpy as np
     import pandas as pd
     from pandas.api.types import is_numeric_dtype
 
     from crew_io import emit_metrics, input_path
 
     TARGET = "target"
+    # Task/metric + the calibrated leakage ceiling, spliced in by the parent
+    # (mirrors crewml.leakage — the sandbox cannot import crewml by design).
+    LEAK_CFG = json.loads(r"""#<<LEAK_CFG>>""")
 
     df = pd.read_parquet(input_path("train.parquet"))
+    y_train = df[TARGET] if TARGET in df.columns else None
     if TARGET in df.columns:
         df = df.drop(columns=[TARGET])
 
@@ -200,10 +268,86 @@ _VALIDATION_HARNESS = textwrap.dedent(
     original_preserved = all(c in out.columns for c in original)
     rows_preserved = (len(out) == n_in) and out.index.equals(df.index)
     all_numeric = all(is_numeric_dtype(out[c]) for c in new_cols)
-    all_finite_ok = all(out[c].notna().any() or len(out) == 0 for c in new_cols)
+    all_new_have_values = all(out[c].notna().any() or len(out) == 0 for c in new_cols)
+
+
+    def _has_inf(col):
+        """True if the column holds +/-inf. NaN is fine; infinity is not."""
+        values = pd.to_numeric(out[col], errors="coerce").to_numpy(dtype="float64")
+        return bool(np.isinf(values).any())
+
+    # Infinity is the one non-finite value that survives the whole preprocessing
+    # chain and then kills the fit: SimpleImputer runs with
+    # force_all_finite="allow-nan", so it replaces NaN but passes inf straight
+    # through to sklearn's finite assertion. A live run lost a whole dataset to
+    # exactly this (an unguarded ratio in generated FE code), because the old
+    # check here was a nan check misleadingly named `all_finite_ok`. Rejecting inf
+    # at the validation gate means such code never reaches the Trainer at all.
+    no_infinities = not any(_has_inf(c) for c in new_cols)
+
+    # --- Row-wise contract enforcement (Day 22) -------------------------------
+    # The Trainer applies FE once, before CV. That is fold-safe iff the transform
+    # is row-wise and stateless: each row's features depend on that row alone.
+    # The test IS the property: re-run add_features on every other row — a
+    # conforming transform reproduces identical values for those rows; anything
+    # fitted across rows (means, ranks, qcut bins, target encoding) does not.
+    def _same_values(a, b):
+        av = pd.to_numeric(a, errors="coerce").to_numpy(dtype="float64")
+        bv = pd.to_numeric(b, errors="coerce").to_numpy(dtype="float64")
+        return bool(np.allclose(av, bv, rtol=1e-9, atol=1e-12, equal_nan=True))
+
+    row_wise_ok = True
+    if new_cols and n_in >= 4:
+        half = df.iloc[::2]
+        try:
+            out_half = add_features(half.copy())
+            row_wise_ok = all(
+                c in out_half.columns
+                and _same_values(out.loc[half.index, c], out_half[c])
+                for c in new_cols
+            )
+        except Exception:  # the contract also says: never raise
+            row_wise_ok = False
+
+    # --- Engineered-column leakage screen (Day 22) ----------------------------
+    # The same calibrated single-feature CV screen the Profiler runs on the raw
+    # columns, applied to what the FE just built: a new column that standalone-
+    # predicts the target above the metric's ceiling is leakage the crew
+    # introduced (e.g. derived from a column the plan was told to drop).
+    leakage_scores = {}
+    leaky_columns = []
+    ceiling = LEAK_CFG.get("ceiling")
+    if new_cols and ceiling is not None and y_train is not None:
+        from sklearn.model_selection import KFold, StratifiedKFold, cross_val_score
+        from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+
+        seed = int(LEAK_CFG["seed"])
+        for c in new_cols:
+            X1 = pd.to_numeric(out[c], errors="coerce").to_frame().to_numpy(dtype="float64")
+            X1 = np.nan_to_num(X1, nan=-999.0, posinf=-999.0, neginf=-999.0)
+            if LEAK_CFG["task"] == "classification":
+                model = DecisionTreeClassifier(max_depth=3, random_state=seed)
+                cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=seed)
+                target = pd.factorize(y_train)[0]
+                scoring = "roc_auc" if LEAK_CFG["metric"] == "roc_auc" else "f1_macro"
+            else:
+                model = DecisionTreeRegressor(max_depth=3, random_state=seed)
+                cv = KFold(n_splits=3, shuffle=True, random_state=seed)
+                target = y_train.to_numpy(dtype="float64")
+                scoring = "r2"
+            try:
+                score = float(np.mean(cross_val_score(model, X1, target, cv=cv, scoring=scoring)))
+            except Exception:
+                continue  # unscoreable is not evidence of leakage
+            if np.isfinite(score):
+                leakage_scores[c] = round(score, 6)
+                if score >= ceiling:
+                    leaky_columns.append(c)
+    no_leakage = not leaky_columns
 
     emit_metrics(
-        ok=bool(original_preserved and rows_preserved and all_numeric),
+        ok=bool(original_preserved and rows_preserved and all_numeric
+                and no_infinities and row_wise_ok and no_leakage),
         n_rows_in=int(n_in),
         n_rows_out=int(len(out)),
         new_columns=list(new_cols),
@@ -211,7 +355,14 @@ _VALIDATION_HARNESS = textwrap.dedent(
         original_preserved=bool(original_preserved),
         rows_preserved=bool(rows_preserved),
         all_numeric=bool(all_numeric),
-        all_new_have_values=bool(all_finite_ok),
+        all_new_have_values=bool(all_new_have_values),
+        no_infinities=bool(no_infinities),
+        infinite_columns=[c for c in new_cols if _has_inf(c)],
+        row_wise_ok=bool(row_wise_ok),
+        no_leakage=bool(no_leakage),
+        leaky_columns=list(leaky_columns),
+        leakage_scores=leakage_scores,
+        leakage_ceiling=ceiling,
     )
     print("FE_VALIDATION_OK", flush=True)
     '''
@@ -224,9 +375,24 @@ def _validate_fe(fe_source: str, dataset_key: str, *, timeout_s: int = 60) -> di
     Returns a JSON-friendly dict: ``ok`` plus the observed row/column facts (or the
     executor error on a crash). Never raises for *code* failures — a broken
     ``add_features`` is reported as ``ok: False``, not an exception.
+
+    Day 22: the harness also enforces the row-wise contract and screens the
+    engineered columns for target leakage, using the calibrated ceiling for the
+    dataset's primary metric (spliced in — the sandbox cannot import crewml).
+    A dataset key without a registry entry gets no leakage ceiling (recorded as
+    ``leakage_ceiling: None`` in the verdict, screen skipped); every registered
+    dataset — including probe datasets — is screened.
     """
-    # The marker sits at module level (0 indent) after dedent — splice as-is.
-    harness = _VALIDATION_HARNESS.replace("#<<FE_SOURCE>>", fe_source)
+    spec = REGISTRY.get(dataset_key)
+    leak_cfg = {
+        "task": spec.task if spec else None,
+        "metric": spec.metric if spec else None,
+        "ceiling": SINGLE_FEATURE_CEILING.get(spec.metric) if spec else None,
+        "seed": config.SEED,
+    }
+    # The markers sit at module level (0 indent) after dedent — splice as-is.
+    harness = _VALIDATION_HARNESS.replace("#<<LEAK_CFG>>", json.dumps(leak_cfg))
+    harness = harness.replace("#<<FE_SOURCE>>", fe_source)
     result = run_code(
         harness,
         inputs={"train.parquet": train_path(dataset_key)},
@@ -244,12 +410,83 @@ def _validate_fe(fe_source: str, dataset_key: str, *, timeout_s: int = 60) -> di
             {k: metrics.get(k) for k in (
                 "n_rows_in", "n_rows_out", "new_columns", "n_new",
                 "original_preserved", "rows_preserved", "all_numeric",
-                "all_new_have_values",
+                "all_new_have_values", "no_infinities", "infinite_columns",
+                "row_wise_ok", "no_leakage", "leaky_columns",
+                "leakage_scores", "leakage_ceiling",
             )}
         )
     else:
         verdict["error"] = result.error or "execution failed"
     return verdict
+
+
+# --- Self-repair support (Day 20) -------------------------------------------
+
+def _verdict_error(verdict: dict[str, Any]) -> str:
+    """Render a failed validation verdict as the 'traceback' the repair loop shows."""
+    if not verdict.get("executed_ok", False):
+        return verdict.get("error") or "add_features crashed during sandbox validation"
+    broken = [
+        check
+        for check in (
+            "original_preserved", "rows_preserved", "all_numeric",
+            "all_new_have_values", "no_infinities", "row_wise_ok", "no_leakage",
+        )
+        if verdict.get(check) is False
+    ]
+    detail = ""
+    if verdict.get("no_infinities") is False:
+        bad = verdict.get("infinite_columns") or []
+        detail += (
+            f" The column(s) {bad} contain +/-inf — guard every division and log "
+            "with a safe denominator; NaN is acceptable but infinity is not."
+        )
+    if verdict.get("row_wise_ok") is False:
+        detail += (
+            " The engineered columns are not row-wise/stateless: recomputing them "
+            "on a subset of rows changed their values, which leaks information "
+            "across CV folds. Remove anything fitted across rows — means, ranks, "
+            "quantile bins (qcut), group aggregates, target encoding — and use "
+            "only each row's own values with fixed constants."
+        )
+    if verdict.get("no_leakage") is False:
+        bad = verdict.get("leaky_columns") or []
+        scores = verdict.get("leakage_scores") or {}
+        named = ", ".join(f"{c} (standalone CV {scores.get(c)})" for c in bad)
+        detail += (
+            f" The engineered column(s) [{named}] predict the target on their own "
+            f"above the leakage ceiling ({verdict.get('leakage_ceiling')}) — that "
+            "is target leakage the features introduced. Do not derive features "
+            "from suspected-leaky columns; drop those derivations entirely."
+        )
+    return (
+        "add_features ran but broke the contract: "
+        + (", ".join(f"{c}=False" for c in broken) or "validation reported not-ok")
+        + ". Every original column and the row order/index must be preserved and "
+        "every engineered column must be numeric, finite, row-wise/stateless, "
+        "leakage-free, and have at least one non-null value." + detail
+    )
+
+
+_FE_REPAIR_CONTEXT = (
+    "The module defines add_features(df) for a multi-agent ML crew's Feature "
+    "Engineer. Contract: df is a pandas DataFrame of features only (no 'target' "
+    "column exists); return a NEW DataFrame keeping every original column and "
+    "the row order/index, with extra engineered columns appended. Engineered "
+    "columns must be numeric, row-wise and stateless (no fitting, no cross-row "
+    "statistics, no randomness, no I/O), and must never raise on missing values "
+    "or zero denominators."
+)
+
+
+def _fe_repair_run_fn(dataset_key: str):
+    """Adapt sandbox validation to the repair loop's (ok, error, payload) shape."""
+
+    def run(source: str):
+        verdict = _validate_fe(source, dataset_key)
+        return verdict["ok"], (None if verdict["ok"] else _verdict_error(verdict)), verdict
+
+    return run
 
 
 # --- LLM generation (optional, always validated before trust) ---------------
@@ -261,14 +498,17 @@ def _llm_enabled(with_llm: Optional[bool]) -> bool:
     return os.getenv("CREWML_FE_LLM", "1") != "0"
 
 
-def _generate_llm_fe(plan: dict[str, Any]) -> dict[str, Any]:
+def _generate_llm_fe(
+    plan: dict[str, Any], critique: Optional[dict[str, Any]] = None
+) -> dict[str, Any]:
     """Ask the live provider for dataset-specific ``add_features`` code. Never raises."""
     try:
         result = llm.chat(
             _FE_SYSTEM_PROMPT,
-            _fe_user_prompt(plan),
+            _fe_user_prompt(plan, critique),
             temperature=0.0,
             max_tokens=1024,
+            agent="feature_engineer",
         )
         return {
             "ok": True,
@@ -289,27 +529,36 @@ def run_feature_engineer(
     dataset_key: str,
     *,
     with_llm: Optional[bool] = None,
+    self_repair: Optional[bool] = None,
+    critique: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """Produce validated feature-engineering code for ``dataset_key`` from the plan.
 
     Returns ``{"code": <source>, "meta": <provenance>}``. ``code`` is always a
     runnable ``add_features`` module — the LLM's if it was generated *and* passed
     sandbox validation, otherwise the deterministic default. ``meta.source`` is one
-    of ``"llm"``, ``"default"`` (mock mode / LLM disabled), or ``"fallback"`` (LLM
-    tried but its code failed validation), and carries the validation verdict and
-    any token accounting so a report can see exactly what happened.
+    of ``"llm"``, ``"llm_repaired"`` (Day 20 — the generation failed validation but
+    the self-repair loop produced a passing fix, trail under ``meta.repair``),
+    ``"default"`` (mock mode / LLM disabled), or ``"fallback"`` (LLM tried, and any
+    repair attempts failed too), and carries the validation verdict and token
+    accounting so a report can see exactly what happened. Repaired code earns
+    exactly the same trust as first-try code — a full sandbox validation pass —
+    and the fallback ladder beneath it is unchanged.
     """
     meta: dict[str, Any] = {
         "schema_version": FE_SCHEMA_VERSION,
         "node": "feature_engineer",
         "dataset_key": dataset_key,
         "is_mock": config.is_mock_mode(),
+        # Day 10 promised critiques feed back to the Planner AND the FE; only the
+        # Planner was wired. Record whether this pass actually saw one.
+        "critique_directives": _critique_directives(critique),
     }
 
     use_llm = _llm_enabled(with_llm) and not config.is_mock_mode()
 
     if use_llm:
-        gen = _generate_llm_fe(plan)
+        gen = _generate_llm_fe(plan, critique)
         if gen["ok"]:
             verdict = _validate_fe(gen["code"], dataset_key)
             if verdict["ok"]:
@@ -320,9 +569,33 @@ def run_feature_engineer(
                     validation=verdict,
                 )
                 return {"code": gen["code"], "meta": meta}
-            # Generated but failed the contract — record why and fall back. Keep the
-            # failed verdict under its own key so the default's verdict (below) can
-            # still populate `validation` for the code actually used.
+            # Generated but failed the contract — before falling back, give the
+            # self-repair loop (Day 20) a shot: the failed verdict becomes the
+            # "traceback", and any fix must pass the *same* sandbox validation.
+            if repair_enabled_for_fe(self_repair):
+                repair = repair_loop(
+                    gen["code"],
+                    _verdict_error(verdict),
+                    run_fn=_fe_repair_run_fn(dataset_key),
+                    context=_FE_REPAIR_CONTEXT,
+                )
+                repair_trail = {
+                    k: v for k, v in repair.items() if k not in ("code", "payload")
+                }
+                if repair["recovered"]:
+                    meta.update(
+                        source="llm_repaired", provider=gen["provider"], model=gen["model"],
+                        prompt_tokens=gen["prompt_tokens"],
+                        completion_tokens=gen["completion_tokens"],
+                        validation=repair["payload"],
+                        llm_validation=verdict,
+                        repair=repair_trail,
+                    )
+                    return {"code": repair["code"], "meta": meta}
+                meta["repair"] = repair_trail
+            # Record why and fall back. Keep the failed verdict under its own key
+            # so the default's verdict (below) can still populate `validation`
+            # for the code actually used.
             meta.update(
                 source="fallback", provider=gen.get("provider"), model=gen.get("model"),
                 fallback_reason="generated code failed sandbox validation",

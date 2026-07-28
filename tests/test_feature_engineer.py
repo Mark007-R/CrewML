@@ -157,3 +157,149 @@ def test_source_never_loads_the_holdout():
     src = inspect.getsource(fe)
     assert "load_holdout" not in src
     assert "holdout_path" not in src
+
+
+# --- Finiteness gate (added Day 20 — closes the one real fatal live failure) --
+#
+# A live Phase-3 run lost a whole dataset because generated FE code built an
+# unguarded ratio that produced +/-inf: SimpleImputer runs with
+# force_all_finite="allow-nan", so it replaced NaN but passed inf through to
+# sklearn's finite assertion, which killed the fit. The old check here was a nan
+# check misleadingly named `all_finite_ok`, so infinity was never screened.
+
+_INF_FE = """\
+import pandas as pd
+
+
+def add_features(df):
+    out = df.copy()
+    num = df.select_dtypes(include="number")
+    col = num.columns[0]
+    out["unguarded_ratio"] = df[col] / (df[col] - df[col])
+    return out
+"""
+
+_NAN_FE = """\
+import pandas as pd
+import numpy as np
+
+
+def add_features(df):
+    out = df.copy()
+    num = df.select_dtypes(include="number")
+    col = num.columns[0]
+    keep = df[col].copy().astype("float64")
+    keep.iloc[0] = np.nan          # NaN must stay acceptable — imputers handle it
+    out["mostly_present"] = keep
+    return out
+"""
+
+
+def test_infinite_engineered_column_fails_validation():
+    verdict = fe._validate_fe(_INF_FE, KEY)
+    assert verdict["executed_ok"] is True      # the code RUNS; that was the trap
+    assert verdict["no_infinities"] is False
+    assert verdict["ok"] is False              # ...but must not be trusted
+    assert "unguarded_ratio" in verdict["infinite_columns"]
+
+
+def test_nan_engineered_column_still_passes_validation():
+    verdict = fe._validate_fe(_NAN_FE, KEY)
+    assert verdict["no_infinities"] is True
+    assert verdict["ok"] is True
+
+
+def test_infinite_generated_code_is_rejected_and_falls_back(monkeypatch):
+    monkeypatch.setattr(config, "is_mock_mode", lambda: False)
+    monkeypatch.setattr(llm, "chat", _fake_llm(_INF_FE))
+    out = run_feature_engineer(_plan(), KEY, with_llm=True, self_repair=False)
+    assert out["meta"]["source"] == "fallback"
+    assert out["meta"]["llm_validation"]["no_infinities"] is False
+    assert out["code"] == DEFAULT_FE_SOURCE
+
+
+def test_repair_prompt_names_the_offending_infinite_columns():
+    """The self-repair loop can only fix what the error text tells it."""
+    verdict = fe._validate_fe(_INF_FE, KEY)
+    message = fe._verdict_error(verdict)
+    assert "no_infinities=False" in message
+    assert "unguarded_ratio" in message
+    assert "safe denominator" in message
+
+
+# --- Critique feedback reaches the FE (Day 10's other half, wired Day 20) -----
+#
+# Day 10 promised the Critic's instructions feed back to "Planner/FE", but only the
+# Planner was ever wired. On a looped pass the FE regenerated from the plan alone and
+# could re-introduce the exact feature the Critic objected to — and a target-derived
+# engineered column is something ONLY the FE can remove.
+
+_LEAK_CRITIQUE = {
+    "decision": "iterate",
+    # `findings` is what the Planner reads: plain strings, not dicts.
+    "findings": [
+        "leakage: engineered column mirrors the target [leak]",
+        "imbalance: class imbalance unhandled [imbalance]",
+    ],
+    "diagnoses": [
+        {"code": "leakage", "keyword": "leak", "severity": "high",
+         "detail": "Possible leakage: engineered column mirrors the target.",
+         "directive": "Re-audit dropped columns and any engineered feature derived "
+                      "from the target; drop the suspect column(s) before re-training."},
+        {"code": "imbalance", "keyword": "imbalance", "severity": "medium",
+         "detail": "Class imbalance unhandled.",
+         "directive": "Force class_weight='balanced' — a Planner-only concern."},
+    ],
+}
+
+
+def test_fe_prompt_carries_the_critique_directives(monkeypatch):
+    monkeypatch.setattr(config, "is_mock_mode", lambda: False)
+    seen = {}
+
+    def chat(system, user, **kwargs):
+        seen["user"] = user
+        return llm.LLMResult(text="```python\n" + DEFAULT_FE_SOURCE + "\n```",
+                             provider="fake", model="fake-1",
+                             prompt_tokens=10, completion_tokens=5)
+
+    monkeypatch.setattr(llm, "chat", chat)
+    out = fe.run_feature_engineer(_plan(), KEY, with_llm=True, critique=_LEAK_CRITIQUE)
+
+    assert "was CRITIQUED" in seen["user"]
+    assert "derived from the target" in seen["user"]          # the FE-relevant directive
+    assert "class_weight" not in seen["user"]                 # Planner-only, filtered out
+    assert out["meta"]["critique_directives"]                 # recorded as provenance
+
+
+def test_fe_prompt_is_unchanged_on_the_first_pass(monkeypatch):
+    monkeypatch.setattr(config, "is_mock_mode", lambda: False)
+    seen = {}
+
+    def chat(system, user, **kwargs):
+        seen["user"] = user
+        return llm.LLMResult(text="```python\n" + DEFAULT_FE_SOURCE + "\n```",
+                             provider="fake", model="fake-1",
+                             prompt_tokens=10, completion_tokens=5)
+
+    monkeypatch.setattr(llm, "chat", chat)
+    out = fe.run_feature_engineer(_plan(), KEY, with_llm=True, critique=None)
+    assert "was CRITIQUED" not in seen["user"]
+    assert out["meta"]["critique_directives"] == []
+
+
+def test_trainer_node_passes_the_latest_critique_to_the_fe(monkeypatch):
+    """The graph must actually hand the critique over, not just support it."""
+    from crewml.crew import nodes
+
+    captured = {}
+    monkeypatch.setattr(
+        nodes, "run_feature_engineer",
+        lambda plan, key, critique=None: captured.update(critique=critique)
+        or {"code": DEFAULT_FE_SOURCE, "meta": {}},
+    )
+    nodes.feature_engineer({
+        "plan": {}, "dataset_key": KEY,
+        "critiques": [{"decision": "iterate", "findings": []}, _LEAK_CRITIQUE],
+    })
+    assert captured["critique"] is _LEAK_CRITIQUE      # the LATEST pass, not the first

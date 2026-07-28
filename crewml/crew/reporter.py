@@ -30,6 +30,7 @@ from __future__ import annotations
 import json
 from typing import Any, Optional
 
+from crewml import budget as budget_mod
 from crewml.config import ARTIFACTS_DIR
 
 REPORT_SCHEMA_VERSION = 1
@@ -79,7 +80,7 @@ def _final_model(training: dict[str, Any], ensemble: dict[str, Any]) -> dict[str
         "kind": "none",
         "chosen": None,
         "cv_score": None,
-        "note": "training failed — no model produced (self-repair is Day 20)",
+        "note": "training failed — no model produced, and self-repair did not recover it",
     }
 
 
@@ -113,13 +114,41 @@ def _collect_llm_usage(state: dict[str, Any]) -> dict[str, Any]:
         _add("critic", c.get("llm_narrative"))
 
     # The Feature Engineer records tokens on its meta, not a narrative dict.
+    # NOTE: match every LLM-AUTHORED source, not just "llm". Day 20 added
+    # "llm_repaired" (generation failed validation, the self-repair loop fixed
+    # it, and the fix is what shipped). Testing `== "llm"` there would erase the
+    # provenance of code an LLM wrote, and — when the FE is the only live surface —
+    # let ``any_live`` go False, making the MODEL_CARD assert that no LLM ran live
+    # on a run that made two or more live calls. That is the one claim this
+    # module exists to get right.
     fe_meta = state.get("fe_meta") or {}
-    if fe_meta.get("source") == "llm":
+    if fe_meta.get("source") in ("llm", "llm_repaired"):
         narratives.append({
             "node": "feature_engineer", "source": fe_meta.get("provider"),
             "model": fe_meta.get("model"), "live": True,
             "prompt_tokens": fe_meta.get("prompt_tokens"),
             "completion_tokens": fe_meta.get("completion_tokens"), "reason": None,
+        })
+    # The repair attempts are additional live calls with their own token cost.
+    fe_repair = fe_meta.get("repair") or {}
+    if fe_repair.get("attempted") and (fe_repair.get("attempts") or []):
+        narratives.append({
+            "node": "feature_engineer_repair", "source": fe_meta.get("provider"),
+            "model": fe_meta.get("model"), "live": True,
+            "prompt_tokens": fe_repair.get("total_prompt_tokens"),
+            "completion_tokens": fe_repair.get("total_completion_tokens"),
+            "reason": None,
+        })
+    # ...and so are the Trainer's, which are billed to the same provider.
+    tr_repair = (state.get("training") or {}).get("repair") or {}
+    if tr_repair.get("attempted") and (tr_repair.get("attempts") or []):
+        first = tr_repair["attempts"][0]
+        narratives.append({
+            "node": "trainer_repair", "source": first.get("provider"),
+            "model": first.get("model"), "live": True,
+            "prompt_tokens": tr_repair.get("total_prompt_tokens"),
+            "completion_tokens": tr_repair.get("total_completion_tokens"),
+            "reason": None,
         })
 
     live = sum(1 for n in narratives if n["live"])
@@ -138,12 +167,17 @@ def _collect_llm_usage(state: dict[str, Any]) -> dict[str, Any]:
 
 # --- Build the structured report --------------------------------------------
 
-def build_report(state: dict[str, Any]) -> dict[str, Any]:
+def build_report(state: dict[str, Any], *, run_budget: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     """Synthesise the final report from the crew's terminal state (pure, no I/O).
 
     Returns a JSON-serialisable dict summarising the run end-to-end: the data profile,
     the plan, the feature engineering, the training + Critic loop, the ensemble decision,
     and the honesty caveats a reader must see. Renders the model-card markdown too.
+
+    ``run_budget`` (Day 21) is the run's final budget-ledger snapshot — passed in by
+    :func:`run_reporter` so this function stays pure. It is surfaced verbatim under
+    ``report["run_budget"]``, and a budget that refused calls or stopped the loop
+    early becomes an explicit warning, never a silent degradation.
     """
     dataset_key = state["dataset_key"]
     metric = state.get("metric") or (state.get("plan") or {}).get("metric")
@@ -178,6 +212,45 @@ def build_report(state: dict[str, Any]) -> dict[str, Any]:
         warnings.append("Run was in MOCK LLM mode — advisory narratives are unavailable, not real model output.")
     if not llm_usage["any_live"]:
         warnings.append("No advisory LLM narrative ran live this run; every decision stands on the deterministic core.")
+    # Self-repair (Day 20) must never be a silent save: if the shipped model came
+    # from code that had to be fixed after crashing, the reader is told so here.
+    tr_rep = training.get("repair") or {}
+    if training.get("repaired"):
+        n = len(tr_rep.get("attempts") or [])
+        warnings.append(
+            f"Training code CRASHED and was repaired by the self-repair loop "
+            f"({n} attempt(s)); the shipped model comes from the repaired script, "
+            "not the originally generated one."
+        )
+    elif tr_rep.get("attempted") and not tr_rep.get("recovered"):
+        warnings.append(
+            "Training code crashed and self-repair did NOT recover it — the "
+            "attempt trail is recorded under training.repair."
+        )
+    if fe_meta.get("source") == "llm_repaired":
+        warnings.append(
+            "The shipped feature-engineering code failed validation on first "
+            "generation and was repaired before passing; provenance under "
+            "fe_meta.repair."
+        )
+    # Day 21: a budget that turned work away is disclosed, not buried in the ledger.
+    budget_stopped = any(
+        c.get("decision") == "finalize" and "run budget" in (c.get("reason") or "")
+        for c in critiques
+    )
+    if run_budget and (run_budget.get("n_refused") or budget_stopped):
+        refused = run_budget.get("n_refused") or 0
+        bits = []
+        if refused:
+            bits.append(f"{refused} LLM call(s) were refused by the run budget")
+        if budget_stopped:
+            bits.append("the Critic finalised early on budget grounds")
+        warnings.append(
+            "Run was BUDGET-CONSTRAINED: " + " and ".join(bits) +
+            f" (spent {run_budget.get('tokens_spent', 0)} tokens, "
+            f"{run_budget.get('elapsed_s', 0):.0f}s; full ledger under run_budget). "
+            "The result stands on whatever the budget allowed plus the deterministic core."
+        )
 
     report: dict[str, Any] = {
         "schema_version": REPORT_SCHEMA_VERSION,
@@ -213,6 +286,11 @@ def build_report(state: dict[str, Any]) -> dict[str, Any]:
             "cv_score": training.get("cv_score"),
             "per_model": (training.get("metrics") or {}).get("per_model"),
             "error": training.get("error"),
+            # Day 20: a repaired run is reported as repaired, never as a clean
+            # first-try run. `repair_attempts` is 0 on the common clean path.
+            "repaired": bool(training.get("repaired")),
+            "repair_attempts": len(tr_rep.get("attempts") or []),
+            "repair_recovered_on_attempt": tr_rep.get("recovered_on_attempt"),
         },
         "ensemble": {
             "attempted": ensemble.get("attempted"),
@@ -225,6 +303,8 @@ def build_report(state: dict[str, Any]) -> dict[str, Any]:
         },
         "critic_passes": critic_passes,
         "llm_usage": llm_usage,
+        # Day 21: the run's final cost ledger (None when no budget was active).
+        "run_budget": run_budget,
         "warnings": warnings,
     }
     report["model_card_markdown"] = render_model_card(report)
@@ -334,8 +414,15 @@ def render_model_card(report: dict[str, Any]) -> str:
 
 {warnings}
 
-- The executor is a **process-isolation** sandbox, not yet a security sandbox
-  (hardening is Phase 4 / Day 19).
+- The executor runs generated code under a **SandboxPolicy** (Day 19): stdlib +
+  DS-stack import allowlist, no network egress, a filesystem jail, and memory/CPU
+  caps. That is defence-in-depth against careless generated code, **not** a
+  hostile-adversary boundary — true OS-level isolation arrives with the Day-27
+  Docker wrapper.
+- Generated code that **crashes** gets one bounded self-repair pass (Day 20): the
+  traceback goes back to the provider and a repaired run is adopted only if it
+  clears the same acceptance gate. Any repair is disclosed in the warnings above,
+  never applied silently. Timeouts and memory kills are never repaired.
 - "Overfit" signals from the Critic are **cross-validation fold-instability**, not a
   train-vs-held-out gap — the crew cannot see the held-out split by construction.
 """
@@ -349,8 +436,15 @@ def run_reporter(state: dict[str, Any]) -> dict[str, Any]:
     Returns the report dict (stored on the state). The markdown card and a
     narrative-free JSON copy are written under ``artifacts/crew/<dataset>/`` — git-ignored
     per-run artifacts, so the crew genuinely "writes the report" without polluting the repo.
+
+    As the crew's terminal node this is where the run's budget ledger (Day 21) is
+    read one final time — post-Ensembler, so the snapshot covers the whole run.
     """
-    report = build_report(state)
+    active_budget = budget_mod.active()
+    report = build_report(
+        state,
+        run_budget=active_budget.snapshot() if active_budget is not None else None,
+    )
 
     out_dir = ARTIFACTS_DIR / "crew" / state["dataset_key"]
     out_dir.mkdir(parents=True, exist_ok=True)

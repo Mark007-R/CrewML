@@ -255,9 +255,29 @@ def classify_run(record: dict[str, Any], *, run: str, system: str = "crew") -> l
     # Execution failures.
     if training and not training.get("ok", True):
         cat = "exec_timeout" if training.get("timed_out") else "exec_error"
+        repair = training.get("repair") or {}
+        detail = str(training.get("error") or "training run failed")
+        if repair.get("attempted") and not repair.get("recovered"):
+            detail += (
+                f" [self-repair attempted, {len(repair.get('attempts') or [])} "
+                "attempt(s), did not recover]"
+            )
         events.append(_event(
-            cat, "fatal", dataset=dataset, run=run, system=system,
-            evidence=str(training.get("error") or "training run failed"),
+            cat, "fatal", dataset=dataset, run=run, system=system, evidence=detail,
+        ))
+    elif training.get("repaired"):
+        # Day 20: the code DID crash — the self-repair loop absorbed it. Without
+        # this branch the census reads a repaired run as clean and undercounts the
+        # exec_error family, hiding both the fault and the guard that caught it.
+        # `handled` is the established outcome for "a guard absorbed the fault".
+        repair = training.get("repair") or {}
+        events.append(_event(
+            "exec_error", "handled", dataset=dataset, run=run, system=system,
+            evidence=(
+                "generated code crashed and the self-repair loop recovered it on "
+                f"attempt {repair.get('recovered_on_attempt')} of "
+                f"{repair.get('max_attempts')}"
+            ),
         ))
     if ensemble.get("attempted") and ensemble.get("ok") is False:
         cat = "exec_timeout" if ensemble.get("timed_out") else "exec_error"

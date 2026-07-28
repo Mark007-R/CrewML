@@ -223,8 +223,7 @@ def test_critic_is_real_with_a_decision(final_state):
 
 def test_crew_source_never_references_the_holdout():
     # Structural no-peeking: no crew-package module names the holdout loader.
-    for mod in (crew_nodes,
-                __import__("crewml.crew.state", fromlist=["x"]),
+    for mod in (__import__("crewml.crew.state", fromlist=["x"]),
                 __import__("crewml.crew.graph", fromlist=["x"]),
                 __import__("crewml.crew.profiler", fromlist=["x"]),
                 __import__("crewml.crew.planner", fromlist=["x"]),
@@ -236,7 +235,13 @@ def test_crew_source_never_references_the_holdout():
     # The Ensembler + Reporter (Day 11) carry the `cv_score_is_holdout` honesty flag and
     # name the held-out split in their prose, so the bare-substring check doesn't fit —
     # the meaningful structural guarantee is that they never call the held-out LOADER.
-    for mod in (__import__("crewml.crew.ensembler", fromlist=["x"]),
+    # `nodes` joined them on Day 20: the Trainer node documents WHY a repaired
+    # add_features must be written back to state (otherwise later held-out scoring
+    # would re-apply an FE the shipped model was never fitted with). A comment cannot
+    # load data, and a check that forbids the vocabulary punishes documenting the
+    # invariant — the same too-blunt-guard mistake the Day-20 no-peek guard made.
+    for mod in (crew_nodes,
+                __import__("crewml.crew.ensembler", fromlist=["x"]),
                 __import__("crewml.crew.reporter", fromlist=["x"])):
         src = inspect.getsource(mod)
         assert "load_holdout" not in src

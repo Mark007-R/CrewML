@@ -1,0 +1,138 @@
+{
+  "study": "day23_reproducibility",
+  "param_search": false,
+  "max_iterations": 3,
+  "pins_reference": {
+    "seed": 42,
+    "python": "3.11.9",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "machine": "AMD64",
+    "packages": {
+      "numpy": "1.26.4",
+      "pandas": "2.1.4",
+      "scikit-learn": "1.8.0",
+      "scipy": "1.13.0",
+      "langgraph": "1.2.9",
+      "matplotlib": "3.10.8",
+      "flaml": "2.6.0"
+    },
+    "git_commit": "7ae606b767394b6bf7d2fe1a3b28fdbbc94ad254",
+    "git_dirty": true,
+    "llm": {
+      "provider": "groq",
+      "model": "llama-3.3-70b-versatile",
+      "mock_mode": false,
+      "temperature_default": 0.0
+    },
+    "config": {
+      "max_iterations": 3,
+      "executor_timeout_s": 120,
+      "executor_sandbox": true,
+      "executor_mem_mb": 3072,
+      "self_repair": true,
+      "self_repair_max_attempts": 2,
+      "run_token_budget": 200000,
+      "run_time_budget_s": 1800
+    },
+    "crewml_env": {}
+  },
+  "arms": {
+    "deterministic_core": {
+      "datasets": {
+        "credit-g": {
+          "runs": [
+            {
+              "result_fingerprint": "8874e648ad83ea66ee0df1481e4d18644402f7905d1e15ea28ef618ce0126a5f",
+              "cv_score": 0.797173,
+              "final_model": "ensemble",
+              "fe_code_sha256": "22ad7f7d2a23f68c3aaa255582d49c5732c67c06cf1ac3f3e9ba88e78f121b2c",
+              "narratives_sha256": "6186cea9dd1be69e39b14df92ba05c8ea77c5b21fa01ec37a5be5b2c8be554aa",
+              "holdout_untouched": true,
+              "duration_s": 22.2,
+              "tokens": 0
+            },
+            {
+              "result_fingerprint": "8874e648ad83ea66ee0df1481e4d18644402f7905d1e15ea28ef618ce0126a5f",
+              "cv_score": 0.797173,
+              "final_model": "ensemble",
+              "fe_code_sha256": "22ad7f7d2a23f68c3aaa255582d49c5732c67c06cf1ac3f3e9ba88e78f121b2c",
+              "narratives_sha256": "6186cea9dd1be69e39b14df92ba05c8ea77c5b21fa01ec37a5be5b2c8be554aa",
+              "holdout_untouched": true,
+              "duration_s": 22.68,
+              "tokens": 0
+            }
+          ],
+          "identical": true
+        },
+        "cpu_small": {
+          "runs": [
+            {
+              "result_fingerprint": "be1590f213662611c84b21a824d86455111353fb74182ad586f79890e432ae5e",
+              "cv_score": 0.977309,
+              "final_model": "single",
+              "fe_code_sha256": "22ad7f7d2a23f68c3aaa255582d49c5732c67c06cf1ac3f3e9ba88e78f121b2c",
+              "narratives_sha256": "6186cea9dd1be69e39b14df92ba05c8ea77c5b21fa01ec37a5be5b2c8be554aa",
+              "holdout_untouched": true,
+              "duration_s": 28.43,
+              "tokens": 0
+            },
+            {
+              "result_fingerprint": "be1590f213662611c84b21a824d86455111353fb74182ad586f79890e432ae5e",
+              "cv_score": 0.977309,
+              "final_model": "single",
+              "fe_code_sha256": "22ad7f7d2a23f68c3aaa255582d49c5732c67c06cf1ac3f3e9ba88e78f121b2c",
+              "narratives_sha256": "6186cea9dd1be69e39b14df92ba05c8ea77c5b21fa01ec37a5be5b2c8be554aa",
+              "holdout_untouched": true,
+              "duration_s": 28.39,
+              "tokens": 0
+            }
+          ],
+          "identical": true
+        }
+      },
+      "all_identical": true
+    },
+    "seed_sensitivity": {
+      "dataset": "credit-g",
+      "seed_base": 42,
+      "seed_alt": 43,
+      "fingerprint_base": "8874e648ad83ea66ee0df1481e4d18644402f7905d1e15ea28ef618ce0126a5f",
+      "fingerprint_alt": "c1f90b1bb2158f58e8fd1b56d0ea101e9da8064aa70cc70be294c4e1c62046c5",
+      "cv_base": 0.797173,
+      "cv_alt": 0.801711,
+      "fingerprint_moved": true
+    },
+    "live_llm": {
+      "measured": true,
+      "dataset": "credit-g",
+      "provider": "groq",
+      "model": "llama-3.3-70b-versatile",
+      "runs": [
+        {
+          "result_fingerprint": "c0b730929550fb554b8f424c3aa0b3814fa61a1bf621cfedadf0245244088a7c",
+          "cv_score": 0.803088,
+          "final_model": "ensemble",
+          "fe_code_sha256": "b948352137c833ae00b12555ffb0f4a19c3cf6306d6c2446940177f20d0f8067",
+          "narratives_sha256": "e6d00e8497020c16149367ce26dc58d72757a881282ef2893c6b0268d323d112",
+          "holdout_untouched": true,
+          "duration_s": 28.46,
+          "tokens": 2038
+        },
+        {
+          "result_fingerprint": "10c259b532087fe5ed664446ed2dcfa0a6ae56b9f154e527b896fd39caa83f7d",
+          "cv_score": 0.798698,
+          "final_model": "ensemble",
+          "fe_code_sha256": "f36c2d2b6f5b8a2b22d4c143ce5c73e0d49912f15f4e86c37f79412a78542082",
+          "narratives_sha256": "83dddb0a66368dadef3271e07aed77fc6391d5e2c47acf50fd3ec149226ce8d6",
+          "holdout_untouched": true,
+          "duration_s": 36.97,
+          "tokens": 4474
+        }
+      ],
+      "result_identical": false,
+      "fe_code_identical": false,
+      "narratives_identical": false
+    }
+  },
+  "holdout_untouched_throughout": true
+}

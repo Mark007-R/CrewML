@@ -34,6 +34,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from crewml import budget as budget_mod
+from crewml import manifest as manifest_mod
 from crewml.config import ARTIFACTS_DIR, MAX_ITERATIONS, RESULTS_DIR, is_mock_mode
 from crewml.crew import build_crew, initial_state
 from crewml.datasets import REGISTRY, verify_holdout_untouched
@@ -42,13 +44,20 @@ COMMITTED_PATH = RESULTS_DIR / "day11_crew_run.json"
 SAMPLE_CARD_PATH = RESULTS_DIR / "sample_model_card.md"
 
 
-def _run_one(key: str, *, max_iterations: int) -> tuple[dict, dict]:
-    """Invoke the full compiled crew on one dataset; return (committable record, final state)."""
+def _run_one(key: str, *, max_iterations: int,
+             token_budget: int | None = None,
+             time_budget_s: float | None = None) -> tuple[dict, dict]:
+    """Invoke the full compiled crew on one dataset; return (committable record, final state).
+
+    Each dataset runs under its own fresh run budget (Day 21) — token/wall-clock
+    caps default to config (CREWML_RUN_TOKEN_BUDGET / CREWML_RUN_TIME_BUDGET_S).
+    """
     spec = REGISTRY[key]
     app = build_crew()
     state = initial_state(spec, max_iterations=max_iterations)
     limit = 3 + max_iterations * 4 + 10
-    final = app.invoke(state, config={"recursion_limit": limit})
+    with budget_mod.run_budget(token_budget, time_budget_s):
+        final = app.invoke(state, config={"recursion_limit": limit})
 
     report = final.get("report") or {}
     ensemble = final.get("ensemble") or {}
@@ -77,6 +86,7 @@ def _run_one(key: str, *, max_iterations: int) -> tuple[dict, dict]:
         "ensemble_attempted": ensemble.get("attempted"),
         "holdout_untouched": verify_holdout_untouched(key),
         "warnings": report.get("warnings"),
+        "run_budget": report.get("run_budget"),
         "cv_score_is_holdout": False,
     }
     return record, final
@@ -107,6 +117,10 @@ def main() -> int:
     ap.add_argument("--no-llm", action="store_true", help="disable all advisory LLM narratives (deterministic only)")
     ap.add_argument("--max-iterations", type=int, default=MAX_ITERATIONS,
                     help="Critic-loop budget / hard backstop (default: config.MAX_ITERATIONS)")
+    ap.add_argument("--token-budget", type=int, default=None,
+                    help="per-run LLM token cap (default: CREWML_RUN_TOKEN_BUDGET; <=0 uncapped)")
+    ap.add_argument("--time-budget-s", type=float, default=None,
+                    help="per-run wall-clock cap in seconds (default: CREWML_RUN_TIME_BUDGET_S; <=0 uncapped)")
     args = ap.parse_args()
 
     keys = list(REGISTRY) if args.all else [args.dataset]
@@ -127,13 +141,18 @@ def main() -> int:
 
     records: dict[str, dict] = {}
     for k in keys:
-        rec, final = _run_one(k, max_iterations=args.max_iterations)
+        rec, final = _run_one(k, max_iterations=args.max_iterations,
+                              token_budget=args.token_budget,
+                              time_budget_s=args.time_budget_s)
         print("  " + _summarise(rec))
         records[k] = rec
 
         out_dir = ARTIFACTS_DIR / "crew" / k
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "final_run.json").write_text(json.dumps(final, indent=2, default=str))
+        # Day 23: pin + fingerprint the run so a re-run is checkable, not anecdotal.
+        m = manifest_mod.write_run_manifest(final, out_dir / "run_manifest.json")
+        rec["result_fingerprint"] = m["result_fingerprint"]
 
         # Commit the primary dataset's model card as an inspectable sample deliverable.
         if k == keys[0]:

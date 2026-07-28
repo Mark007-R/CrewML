@@ -79,7 +79,17 @@ def feature_engineer(state: CrewState) -> dict[str, Any]:
     the contract; otherwise (mock mode, LLM disabled, or a failed generation) it falls
     back to the deterministic default. The chosen source feeds the Trainer.
     """
-    result = run_feature_engineer(state["plan"], state["dataset_key"])
+    # On a Critic-triggered re-entry the FE now sees the latest critique too. Day 10
+    # promised the loop feeds specific instructions back to "Planner/FE" but only the
+    # Planner was wired: the FE regenerated from the plan alone and could re-introduce
+    # the very feature the Critic objected to (a target-derived column is something
+    # only whoever writes the FE code can remove).
+    critiques = state.get("critiques") or []
+    result = run_feature_engineer(
+        state["plan"],
+        state["dataset_key"],
+        critique=critiques[-1] if critiques else None,
+    )
     return {"fe_code": result["code"], "fe_meta": result["meta"], "trace": ["feature_engineer"]}
 
 
@@ -98,7 +108,15 @@ def trainer(state: CrewState) -> dict[str, Any]:
         state["dataset_key"],
         iteration=state.get("iteration", 0),
     )
-    return {"training": training, "trace": ["trainer"]}
+    update: dict[str, Any] = {"training": training, "trace": ["trainer"]}
+    # A self-repair (Day 20) may have rewritten add_features to get the run to
+    # complete. The Ensembler is called with state["fe_code"], so without this
+    # write-back it would re-run the exact code that just crashed — and any later
+    # holdout scoring would re-apply an FE the shipped model was never fitted
+    # with. Adopt the FE the winning run actually persisted.
+    if training.get("fe_code_used"):
+        update["fe_code"] = training["fe_code_used"]
+    return update
 
 
 # --- Ablation stand-ins (Day 14) — naive floors, not smarter alternatives ---

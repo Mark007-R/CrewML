@@ -39,11 +39,20 @@ def test_stdout_captured_and_ok_on_clean_exit():
 def test_default_timeout_is_config_value(monkeypatch):
     captured = {}
 
-    def fake_run(*args, **kwargs):
-        captured["timeout"] = kwargs.get("timeout")
-        raise AssertionError("stop after capturing timeout")
+    class FakeProc:
+        returncode = 0
 
-    monkeypatch.setattr(executor.subprocess, "run", fake_run)
+        def communicate(self, timeout=None):
+            captured["timeout"] = timeout
+            raise AssertionError("stop after capturing timeout")
+
+        def poll(self):
+            return 0
+
+        def kill(self):
+            pass
+
+    monkeypatch.setattr(executor.subprocess, "Popen", lambda *a, **k: FakeProc())
     with pytest.raises(AssertionError):
         executor.run_code("print('x')\n")
     assert captured["timeout"] == EXECUTOR_TIMEOUT_S

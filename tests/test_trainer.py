@@ -130,10 +130,18 @@ def test_regression_path_produces_r2():
 # --- Failure is reported, never raised --------------------------------------
 
 def test_broken_fe_code_is_reported_not_raised():
+    """Day-9 semantics: a crash is REPORTED, never raised.
+
+    Pinned to ``self_repair=False`` since Day 20. With the self-repair loop on (the
+    default) and a live provider configured, a broken generation may legitimately be
+    fixed and the run come back ``ok: True`` — which is the feature working, not a
+    regression. This test still owns the pre-repair contract; the repaired path has
+    its own coverage in tests/test_repair.py.
+    """
     key = "credit-g"
     plan = _plan(key)
     broken = "def add_features(df):\n    this is not valid python\n"
-    result = run_trainer(plan, broken, key, param_search=False)   # must not raise
+    result = run_trainer(plan, broken, key, param_search=False, self_repair=False)
     assert result["ok"] is False
     assert result["cv_score"] is None
     assert result["error"]

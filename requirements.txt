@@ -14,6 +14,10 @@ langchain-core>=0.3
 
 # --- LLM providers ---
 groq>=0.11
+# Optional second provider for the Day-16 provider study. Imported lazily in
+# crewml/llm.py, so the crew runs fine without a key — but the Claude arm cannot
+# run at all from a clean install unless the SDK is installed.
+anthropic>=0.40
 python-dotenv>=1.0
 
 # --- Classical AutoML baseline (Day 4) ---

@@ -40,7 +40,32 @@ ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5")
 # --- Run budgets ---
 MAX_ITERATIONS = int(os.getenv("CREWML_MAX_ITERATIONS", "3"))
 EXECUTOR_TIMEOUT_S = int(os.getenv("CREWML_EXECUTOR_TIMEOUT_S", "120"))
+# Per-run LLM token cap and wall-clock cap, enforced by crewml.budget (Day 21):
+# every llm.chat call is gated on the active RunBudget pre-call and charged to it
+# after; the Critic finalises early when a cap is spent or unaffordable. <= 0
+# means uncapped. (The token budget existed since Day 5 but was unenforced.)
 RUN_TOKEN_BUDGET = int(os.getenv("CREWML_RUN_TOKEN_BUDGET", "200000"))
+RUN_TIME_BUDGET_S = int(os.getenv("CREWML_RUN_TIME_BUDGET_S", "1800"))
+
+# --- Executor sandbox (Day 19 hardening) ---
+# On by default; CREWML_EXECUTOR_SANDBOX=0 is the explicit escape hatch.
+EXECUTOR_SANDBOX = os.getenv("CREWML_EXECUTOR_SANDBOX", "1").lower() not in (
+    "0", "false", "off",
+)
+# Child memory cap in MiB (0 = uncapped). POSIX: hard RLIMIT_AS; Windows: a
+# parent-side watchdog kills the direct child when its working set exceeds it.
+EXECUTOR_MEM_MB = int(os.getenv("CREWML_EXECUTOR_MEM_MB", "3072"))
+
+# --- Self-repair loop (Day 20) ---
+# Master switch: when generated code crashes, let the writing agent see the
+# traceback and try again. Per-node overrides: CREWML_TRAINER_SELF_REPAIR /
+# CREWML_FE_SELF_REPAIR. Off => the pre-Day-20 observe-and-degrade behaviour.
+SELF_REPAIR = os.getenv("CREWML_SELF_REPAIR", "1").lower() not in (
+    "0", "false", "off",
+)
+# Hard cap on repair attempts per failure (each attempt = one LLM call + one
+# sandboxed re-run). Timeouts/OOM kills are never repaired regardless.
+SELF_REPAIR_MAX_ATTEMPTS = int(os.getenv("CREWML_SELF_REPAIR_MAX_ATTEMPTS", "2"))
 
 # Per-dataset wall-clock budget for the Day 4 classical-AutoML ceiling (FLAML).
 # Held >= the crew's per-node executor timeout so beating AutoML is never an

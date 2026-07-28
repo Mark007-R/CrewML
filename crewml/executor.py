@@ -26,12 +26,14 @@ What Day 6 delivers (the *tool* and its contract):
   and files back across the process boundary. No helper import is required — code
   may also just write ``metrics.json`` itself.
 
-**Scope honesty.** This is a *process-isolation* sandbox, not yet a *security*
-sandbox. Import allow-listing, a network jail, filesystem confinement, and
-adversarial resource limits are **Day 19** (Phase 4 hardening) — they layer on top
-of this contract without changing it. Until then the executor is trusted with
-*our own* generated code, not with hostile input. The docstring says so on purpose
-so no report can overclaim it (EVAL_PROTOCOL §5 honesty spirit).
+**Hardened since Day 19.** The security layer the Day-6 docstring promised now
+exists: every run executes under a :class:`crewml.sandbox.SandboxPolicy` (import
+allowlist, network egress refusal, filesystem write jail + read-deny roots,
+memory/CPU caps), enforced by a guard installed inside the child interpreter —
+see :mod:`crewml.sandbox` for mechanisms and the honesty scope (defence-in-depth
+against careless generated code, not a hostile-adversary boundary; that arrives
+with the Day-27 Docker wrapper). The Day-6 contract is unchanged: same call, same
+:class:`ExecResult`, refusals surface as ordinary reported failures.
 
 **No peeking, structurally.** The executor is data-agnostic: it copies in exactly
 the input files the caller names and knows nothing about datasets or splits. It
@@ -45,6 +47,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -52,6 +55,17 @@ from pathlib import Path
 from typing import Any, Mapping, Optional
 
 from crewml.config import ARTIFACTS_DIR, EXECUTOR_TIMEOUT_S, SEED
+from crewml.sandbox import (
+    GUARD_BOOT,
+    GUARD_BOOT_SOURCE,
+    GUARD_MODULE,
+    GUARD_SOURCE,
+    SITECUSTOMIZE,
+    SITECUSTOMIZE_SOURCE,
+    SandboxPolicy,
+    default_policy,
+    policy_env,
+)
 
 EXECUTOR_DIR = ARTIFACTS_DIR / "executor"
 
@@ -66,6 +80,13 @@ STDERR_LOG = "stderr.log"
 
 # How many trailing stderr lines to surface as the short ``error`` summary.
 _ERROR_TAIL_LINES = 8
+
+# Cap on each captured stream (chars). Protects the *parent* from a child that
+# floods stdout — the full stream still lands in the workdir logs up to this cap.
+MAX_STREAM_CHARS = 1_000_000
+
+# How often the Windows memory watchdog samples the child's working set.
+_WATCHDOG_POLL_S = 0.2
 
 
 # --- The helper injected into every workdir as ``crew_io.py`` ---------------
@@ -137,6 +158,8 @@ class ExecResult:
     warnings: list[str] = field(default_factory=list)
     workdir: str = ""
     run_id: str = ""
+    oom: bool = False                # killed/failed over the memory cap (Day 19)
+    sandboxed: bool = False          # a SandboxPolicy was active for this run
 
     def as_dict(self) -> dict[str, Any]:
         """A crew-state-friendly summary — omits the (potentially large) streams."""
@@ -144,6 +167,8 @@ class ExecResult:
             "ok": self.ok,
             "returncode": self.returncode,
             "timed_out": self.timed_out,
+            "oom": self.oom,
+            "sandboxed": self.sandboxed,
             "duration_s": round(self.duration_s, 3),
             "error": self.error,
             "metrics": self.metrics,
@@ -173,6 +198,68 @@ def _collect_artifacts(artifacts_dir: Path) -> list[str]:
     )
 
 
+def _posix_rlimits(mem_mb: int, cpu_s: int):
+    """A preexec_fn setting hard limits between fork and exec (POSIX only)."""
+
+    def set_limits():  # pragma: no cover — POSIX branch, suite runs on Windows too
+        import resource
+
+        if mem_mb:
+            cap = mem_mb * 1024 * 1024
+            resource.setrlimit(resource.RLIMIT_AS, (cap, cap))
+        resource.setrlimit(resource.RLIMIT_CPU, (cpu_s, cpu_s + 5))
+
+    return set_limits
+
+
+def _win_mem_watchdog(proc: subprocess.Popen, cap_bytes: int, hit: dict) -> None:
+    """Poll the direct child's working set; kill it when it exceeds the cap.
+
+    Windows has no inheritable rlimit, so the parent watches. Worker
+    grandchildren are not summed — a documented limit of this mechanism.
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class _PMC(ctypes.Structure):
+            _fields_ = [
+                ("cb", wintypes.DWORD),
+                ("PageFaultCount", wintypes.DWORD),
+                ("PeakWorkingSetSize", ctypes.c_size_t),
+                ("WorkingSetSize", ctypes.c_size_t),
+                ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                ("PagefileUsage", ctypes.c_size_t),
+                ("PeakPagefileUsage", ctypes.c_size_t),
+            ]
+
+        get_info = ctypes.windll.psapi.GetProcessMemoryInfo
+        pmc = _PMC()
+        pmc.cb = ctypes.sizeof(_PMC)
+        while proc.poll() is None:
+            handle = int(getattr(proc, "_handle"))
+            if get_info(handle, ctypes.byref(pmc), pmc.cb) and pmc.WorkingSetSize > cap_bytes:
+                hit["oom"] = True
+                proc.kill()
+                return
+            time.sleep(_WATCHDOG_POLL_S)
+    except Exception:  # a broken watchdog must never take down the run
+        return
+
+
+def _truncated(stream: str, name: str, warnings: list[str]) -> str:
+    if len(stream) <= MAX_STREAM_CHARS:
+        return stream
+    warnings.append(
+        f"{name} truncated by executor at {MAX_STREAM_CHARS} chars "
+        f"({len(stream)} produced)"
+    )
+    return stream[:MAX_STREAM_CHARS] + f"\n...[{name} truncated by executor]"
+
+
 def run_code(
     code: str,
     *,
@@ -181,6 +268,7 @@ def run_code(
     run_id: Optional[str] = None,
     env: Optional[Mapping[str, str]] = None,
     keep_workdir: bool = True,
+    sandbox: Optional[SandboxPolicy] = None,
 ) -> ExecResult:
     """Execute agent-generated Python in an isolated subprocess and report back.
 
@@ -207,6 +295,11 @@ def run_code(
     keep_workdir:
         Keep the workdir (default) so artifacts and logs remain inspectable; set
         ``False`` to delete it after reading results back.
+    sandbox:
+        The :class:`~crewml.sandbox.SandboxPolicy` to enforce; defaults to
+        :func:`~crewml.sandbox.default_policy` (active unless
+        ``CREWML_EXECUTOR_SANDBOX=0``). Pass ``SandboxPolicy(active=False)`` to
+        run un-sandboxed deliberately.
 
     Returns
     -------
@@ -217,6 +310,7 @@ def run_code(
     """
     run_id = run_id or uuid.uuid4().hex[:12]
     timeout_s = int(timeout_s if timeout_s is not None else EXECUTOR_TIMEOUT_S)
+    policy = sandbox if sandbox is not None else default_policy()
 
     work = _new_workdir(run_id)
     artifacts_dir = work / ARTIFACTS_SUBDIR
@@ -242,36 +336,76 @@ def run_code(
             # Determinism knobs (Day-23 reproducibility leans on these).
             "PYTHONHASHSEED": str(SEED),
             "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONIOENCODING": "utf-8",
         }
     )
+
+    argv = [sys.executable, MAIN_SCRIPT]
+    preexec_fn = None
+    if policy.active:
+        # Guard files: fail-closed boot for the main child, best-effort
+        # sitecustomize for worker grandchildren (workdir rides on PYTHONPATH).
+        (work / GUARD_MODULE).write_text(GUARD_SOURCE, encoding="utf-8")
+        (work / GUARD_BOOT).write_text(GUARD_BOOT_SOURCE, encoding="utf-8")
+        (work / SITECUSTOMIZE).write_text(SITECUSTOMIZE_SOURCE, encoding="utf-8")
+        argv = [sys.executable, GUARD_BOOT]
+
+        # Library scratch space lands inside the jail.
+        tmp_dir = work / "tmp"
+        tmp_dir.mkdir(exist_ok=True)
+        child_env.update(policy_env(policy, str(work)))
+        child_env.update(
+            {
+                "TMP": str(tmp_dir),
+                "TEMP": str(tmp_dir),
+                "TMPDIR": str(tmp_dir),
+                "MPLCONFIGDIR": str(work / "mpl"),
+                "PYTHONPATH": str(work)
+                + (os.pathsep + child_env["PYTHONPATH"] if child_env.get("PYTHONPATH") else ""),
+            }
+        )
+        if os.name == "posix":
+            preexec_fn = _posix_rlimits(policy.mem_mb, timeout_s)
     if env:
         child_env.update({str(k): str(v) for k, v in env.items()})
 
     timed_out = False
     warnings: list[str] = []
+    oom_hit: dict[str, bool] = {}
     start = time.monotonic()
+    proc = subprocess.Popen(
+        argv,
+        cwd=str(work),
+        env=child_env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        preexec_fn=preexec_fn,
+    )
+    if policy.active and policy.mem_mb and os.name == "nt":
+        threading.Thread(
+            target=_win_mem_watchdog,
+            args=(proc, policy.mem_mb * 1024 * 1024, oom_hit),
+            daemon=True,
+        ).start()
     try:
-        proc = subprocess.run(
-            [sys.executable, MAIN_SCRIPT],
-            cwd=str(work),
-            env=child_env,
-            capture_output=True,
-            text=True,
-            timeout=timeout_s,
-        )
+        stdout, stderr = proc.communicate(timeout=timeout_s)
         returncode = proc.returncode
-        stdout, stderr = proc.stdout or "", proc.stderr or ""
-    except subprocess.TimeoutExpired as exc:
+    except subprocess.TimeoutExpired:
         timed_out = True
         returncode = None
-        stdout = exc.stdout or ""
-        stderr = exc.stderr or ""
-        if isinstance(stdout, bytes):
-            stdout = stdout.decode("utf-8", "replace")
-        if isinstance(stderr, bytes):
-            stderr = stderr.decode("utf-8", "replace")
+        proc.kill()
+        stdout, stderr = proc.communicate()
     duration_s = time.monotonic() - start
+    stdout, stderr = stdout or "", stderr or ""
+    oom = bool(oom_hit.get("oom"))
+    if not oom and policy.active and policy.mem_mb and "MemoryError" in stderr:
+        oom = True  # POSIX RLIMIT_AS surfaces as MemoryError in the child
 
+    stdout = _truncated(stdout, "stdout", warnings)
+    stderr = _truncated(stderr, "stderr", warnings)
     (work / STDOUT_LOG).write_text(stdout, encoding="utf-8")
     (work / STDERR_LOG).write_text(stderr, encoding="utf-8")
 
@@ -290,10 +424,12 @@ def run_code(
 
     artifacts = _collect_artifacts(artifacts_dir)
 
-    ok = (not timed_out) and returncode == 0
+    ok = (not timed_out) and (not oom) and returncode == 0
     error: Optional[str] = None
     if timed_out:
         error = f"execution exceeded timeout of {timeout_s}s"
+    elif oom:
+        error = f"execution exceeded memory cap of {policy.mem_mb} MiB"
     elif returncode != 0:
         tail = [ln for ln in stderr.strip().splitlines() if ln.strip()][-_ERROR_TAIL_LINES:]
         error = "\n".join(tail) or f"process exited with code {returncode}"
@@ -311,6 +447,8 @@ def run_code(
         warnings=warnings,
         workdir=str(work),
         run_id=run_id,
+        oom=oom,
+        sandboxed=policy.active,
     )
 
     if not keep_workdir:

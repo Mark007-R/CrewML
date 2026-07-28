@@ -253,6 +253,7 @@ def generate_script(spec: DatasetSpec, train: pd.DataFrame) -> tuple[str, dict]:
         build_user_prompt(spec, profile),
         temperature=0.0,
         max_tokens=4096,
+        agent="solo_agent",
     )
     return llm.extract_python(result.text), {
         "mock": False,

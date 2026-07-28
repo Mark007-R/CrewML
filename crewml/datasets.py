@@ -118,5 +118,17 @@ def verify_holdout_untouched(key: str) -> bool:
     return recorded == current
 
 
+def verify_all_holdouts() -> dict[str, bool]:
+    """Seal-check every manifest-locked dataset in one sweep (Day 22).
+
+    Iterates the datasets the manifest fingerprinted — not the live REGISTRY,
+    which may temporarily hold probe datasets that have no holdout at all
+    (Day 17's injection probes register train-only throwaways). Returns
+    ``{key: sealed}``; any ``False`` is a broken honesty invariant.
+    """
+    manifest = load_manifest()
+    return {key: verify_holdout_untouched(key) for key in manifest["datasets"]}
+
+
 def spec_asdict(spec: DatasetSpec) -> dict:
     return asdict(spec)

@@ -99,10 +99,16 @@ def test_render_reports_the_win_record_for_every_headline_comparison():
 
 def test_charts_render_from_a_board_without_a_display(tmp_path):
     # Headless render must work on a scheduled run; also covers the missing-value path.
+    #
+    # MUST render into tmp_path. Passing no out_dir writes to the DEFAULT paths —
+    # results/charts/day12_*.png — so this test used to overwrite the committed
+    # board with its own fixture numbers (a flat 0.500/0.700/0.850/0.900, no solo
+    # bar, both AutoML losses green). Those fixture bytes are what got committed.
     baseline, solo, automl, crew = _reports()
     solo = {"datasets": {k: {"ok": False} for k in REGISTRY}}
     table = assemble_comparison(baseline, solo, automl, crew)
-    paths = render_all(table)
+    paths = render_all(table, out_dir=tmp_path)
     assert len(paths) == 2
     for p in paths:
         assert p.exists() and p.stat().st_size > 0
+        assert p.parent == tmp_path      # never the committed results/charts dir

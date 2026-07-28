@@ -34,19 +34,26 @@ exactly the protocol's quantity; the mapping is recorded for later inversion.
 it through :func:`crewml.executor.run_code`, which is handed only ``train.parquet``.
 This module never names the held-out loader — a source-inspection test asserts it —
 so the no-peeking invariant is a property of the code, not a rule to remember.
+
+**Self-repairing since Day 20.** A script that crashes in the sandbox no longer
+just files an honest failure: the Trainer hands the traceback and the full source
+to the :mod:`crewml.repair` loop and adopts a repaired run when one succeeds —
+with the whole attempt trail recorded under ``training["repair"]``.
 """
 from __future__ import annotations
 
 import json
 import os
 import textwrap
+from pathlib import Path
 from typing import Any, Optional
 
 from crewml import config
 from crewml.datasets import train_path
-from crewml.executor import run_code
+from crewml.executor import ARTIFACTS_SUBDIR, run_code
+from crewml.repair import is_repairable, repair_enabled_for_trainer, repair_loop
 
-TRAINER_SCHEMA_VERSION = 1
+TRAINER_SCHEMA_VERSION = 2  # v2 (Day 20): + "repair"/"repaired" self-repair provenance
 
 
 # --- Config the generated script needs (all derived from the plan) ----------
@@ -293,6 +300,43 @@ def _param_search_enabled(param_search: Optional[bool]) -> bool:
     return os.getenv("CREWML_TRAINER_PARAM_SEARCH", "1") != "0"
 
 
+def _read_persisted_fe(result: Any) -> Optional[str]:
+    """The ``fe_source.py`` a successful run wrote, or None if unreadable.
+
+    This is the FE the winning model was actually fitted with, so it is what the
+    rest of the crew (Ensembler, later holdout scoring) must use after a repair.
+    Returns None rather than raising: a missing artifact is a reportable
+    condition, not a crash, and the acceptance gate already rejects runs that
+    fail to persist it.
+    """
+    workdir = getattr(result, "workdir", "") or ""
+    if not workdir:
+        return None
+    path = Path(workdir) / ARTIFACTS_SUBDIR / "fe_source.py"
+    try:
+        source = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    if "def add_features" not in source:
+        return None
+    return source
+
+
+def _repair_context(dataset_key: str, cfg: dict[str, Any]) -> str:
+    """What the Self-Repair specialist is told the failing script is."""
+    return (
+        f"The module is a training script for dataset {dataset_key!r} "
+        f"(task: {cfg['task']}/{cfg['subtype']}, CV metric: {cfg['scoring']}). "
+        "It loads train.parquet, applies add_features, cross-validates the "
+        "candidate models, refits the best, saves model.joblib + fe_source.py, "
+        "and emits metrics via crew_io.emit_metrics. All of that must still "
+        "happen after your fix. The module also defines FE_SOURCE_TEXT, a string "
+        "constant persisted as the fe_source.py artifact for later scoring — if "
+        "your fix changes the add_features code, update FE_SOURCE_TEXT to the "
+        "matching corrected source so the artifact stays consistent."
+    )
+
+
 def run_trainer(
     plan: dict[str, Any],
     fe_code: str,
@@ -301,6 +345,7 @@ def run_trainer(
     iteration: int = 0,
     param_search: Optional[bool] = None,
     timeout_s: Optional[int] = None,
+    self_repair: Optional[bool] = None,
 ) -> dict[str, Any]:
     """Train the plan's candidates under CV and return metrics + artifact paths.
 
@@ -308,18 +353,94 @@ def run_trainer(
     ``fe_code``, runs it in the sandboxed executor over the train split, and reads
     back the cross-validated results. Never raises for *modeling* failures — a crash
     in the generated code is reported as ``ok: False`` with the captured error, so a
-    single bad run is observable rather than fatal (Day-20 self-repair builds on this).
+    single bad run is observable rather than fatal.
+
+    **Self-repair (Day 20).** When the script *crashes* (non-zero exit — never a
+    timeout or memory kill) and a live provider is configured, the Trainer shows
+    the traceback and the full script to :func:`crewml.repair.repair_loop` and
+    adopts a repaired run if one succeeds. A successful run is one the executor
+    accepts *and* that emitted a ``best_cv_score`` — a "fix" that runs but stops
+    reporting its number is still a failure. The returned record always carries a
+    ``repair`` block (``attempted: False, reason "not_needed"`` on a clean first
+    run) and ``repaired: True`` when the shipped result came from a repaired
+    script, so the Critic and Reporter see the stumble, not a silent save.
     """
     param_search = _param_search_enabled(param_search)
     cfg = _training_config(plan)
     script = _build_script(fe_code, cfg, param_search)
+    effective_timeout = timeout_s if timeout_s is not None else config.EXECUTOR_TIMEOUT_S
 
-    result = run_code(
-        script,
-        inputs={"train.parquet": train_path(dataset_key)},
-        timeout_s=timeout_s if timeout_s is not None else config.EXECUTOR_TIMEOUT_S,
-        keep_workdir=True,
-    )
+    def _run(source: str):
+        return run_code(
+            source,
+            inputs={"train.parquet": train_path(dataset_key)},
+            timeout_s=effective_timeout,
+            keep_workdir=True,
+        )
+
+    result = _run(script)
+
+    repair: dict[str, Any] = {"attempted": False, "reason_not_attempted": "not_needed"}
+    repaired = False
+    fe_code_used: Optional[str] = None
+    if not result.ok and not repair_enabled_for_trainer(self_repair):
+        repair = {"attempted": False, "reason_not_attempted": "disabled"}
+    elif not result.ok:
+        if is_repairable(result):
+
+            def _run_fn(candidate: str):
+                res = _run(candidate)
+                # Acceptance is deliberately stricter than "exit 0". A repaired
+                # script must deliver everything the downstream crew depends on:
+                # the CV score, the fitted model, and the fe_source.py artifact
+                # that later holdout scoring re-applies. A "fix" that drops any
+                # of them is a silent corruption, not a recovery.
+                metrics_ok = (res.metrics or {}).get("best_cv_score") is not None
+                arts = set(res.artifacts or ())
+                missing = [
+                    name for name in ("model.joblib", "fe_source.py") if name not in arts
+                ]
+                ok = bool(res.ok and metrics_ok and not missing)
+                err = res.error
+                if res.ok and not metrics_ok:
+                    err = "script ran but emitted no best_cv_score in metrics.json"
+                elif res.ok and missing:
+                    err = (
+                        "script ran but did not persist required artifact(s): "
+                        + ", ".join(missing)
+                        + ". Keep the joblib.dump of the fitted model and the "
+                        "fe_source.py write intact."
+                    )
+                return ok, err, res
+
+            repair = repair_loop(
+                script,
+                result.error or "",
+                run_fn=_run_fn,
+                context=_repair_context(dataset_key, cfg),
+                # Enforce the no-repairing-resource-exhaustion rule on the
+                # loop's OWN runs too, not just the caller's first failure.
+                not_repairable_fn=lambda res: res is not None and not is_repairable(res),
+            )
+            if repair["recovered"]:
+                result = repair["payload"]
+                repaired = True
+                # The repaired script may carry a DIFFERENT add_features than the
+                # one handed in — that is usually the whole point of the fix. The
+                # crew must therefore adopt it: the Ensembler is called with
+                # ``state["fe_code"]`` and would otherwise re-run the very code
+                # that just crashed. Read back the fe_source.py the winning run
+                # persisted, which is by construction the FE the model was fitted
+                # with (the acceptance gate above requires the artifact to exist).
+                fe_code_used = _read_persisted_fe(result)
+            # The (large) source and ExecResult stay out of the state record —
+            # provenance keeps the attempt trail, the workdir keeps the rest.
+            repair = {k: v for k, v in repair.items() if k not in ("code", "payload")}
+        else:
+            repair = {
+                "attempted": False,
+                "reason_not_attempted": "timeout_or_oom_not_repairable",
+            }
 
     metrics = result.metrics or {}
     training: dict[str, Any] = {
@@ -336,6 +457,12 @@ def run_trainer(
         "error": result.error,
         "artifacts": list(result.artifacts),
         "metrics": metrics,
+        "repaired": repaired,
+        "repair": repair,
+        # Set only when a repair changed the code that produced the shipped model.
+        # ``crewml.crew.nodes.trainer`` writes it back over ``state["fe_code"]`` so
+        # every later consumer uses the FE the model was actually fitted with.
+        "fe_code_used": fe_code_used,
         # Convenience surface for the Critic (Day 10) and reports — always a CV
         # estimate on train, never a held-out number.
         "cv_score": metrics.get("best_cv_score") if result.ok else None,

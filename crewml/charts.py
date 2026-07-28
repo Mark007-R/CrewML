@@ -16,6 +16,7 @@ rather than drawn at zero, since a failed run is not a score of nought.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
 import matplotlib
 
@@ -23,6 +24,7 @@ matplotlib.use("Agg")  # headless: charts render on a scheduled run with no disp
 import matplotlib.pyplot as plt
 
 from crewml.comparison import HEADLINE_DELTAS, METRIC_LABEL, SYSTEMS
+from crewml.phase3_results import int_keyed
 from crewml.config import RESULTS_DIR
 
 CHARTS_DIR = RESULTS_DIR / "charts"
@@ -154,9 +156,23 @@ def plot_crew_deltas(table: dict, path: Path = DELTAS_CHART_PATH) -> Path:
     return path
 
 
-def render_all(table: dict) -> list[Path]:
-    """Render every Day-12 figure; returns the written paths."""
-    return [plot_holdout_scores(table), plot_crew_deltas(table)]
+def render_all(table: dict, out_dir: Optional[Path] = None) -> list[Path]:
+    """Render every Day-12 figure; returns the written paths.
+
+    ``out_dir`` exists so tests can render into a temp directory. Without it a
+    test that only wanted to prove headless rendering works would write its
+    FIXTURE numbers over the committed board — which is exactly what happened:
+    the Day-12 PNGs committed in 57d0daa were test output (a flat
+    0.500/0.700/0.850/0.900 across all five panels, no solo-agent bar, and both
+    AutoML losses painted green) rather than the real results.
+    """
+    if out_dir is None:
+        return [plot_holdout_scores(table), plot_crew_deltas(table)]
+    out_dir = Path(out_dir)
+    return [
+        plot_holdout_scores(table, out_dir / SCORES_CHART_PATH.name),
+        plot_crew_deltas(table, out_dir / DELTAS_CHART_PATH.name),
+    ]
 
 
 # --- Day 13: the Critic-loop ablation ---------------------------------------
@@ -466,9 +482,18 @@ def plot_provider_study(report: dict, path: Path = PROVIDER_STUDY_CHART_PATH) ->
     ax_scores.set_xticks(range(len(keys)))
     ax_scores.set_xticklabels(keys, fontsize=8)
     ax_scores.set_ylabel("held-out score (higher is better)", fontsize=8)
-    ax_scores.set_title("Holdout quality by arm — identical bars = provider-independent core\n"
-                        "(no live-provider arm ran this session; mock is never a headline)",
-                        fontsize=9, fontweight="bold")
+    # Derive the caption from the data. It used to hard-code "no live-provider arm
+    # ran this session" and "identical bars", and both became false once the live
+    # Groq arm was backfilled — the figure asserted the opposite of the bars under it.
+    _probes = report.get("probes") or {}
+    _live = sorted(p for p, pr in _probes.items()
+                   if isinstance(pr, dict) and pr.get("status") == "ok")
+    _live_txt = ("live arm: " + ", ".join(_live)) if _live else "no live-provider arm ran"
+    ax_scores.set_title(
+        f"Holdout quality by arm — {_live_txt}\n"
+        "(mock is shown for reference and is never a headline)",
+        fontsize=9, fontweight="bold",
+    )
     ax_scores.spines[["top", "right"]].set_visible(False)
     ax_scores.margins(y=0.2)
     ax_scores.legend(fontsize=7, frameon=False, loc="lower right")
@@ -626,7 +651,10 @@ def plot_phase3_summary(report: dict, path: Path = PHASE3_SUMMARY_CHART_PATH) ->
     ax_attr.spines[["top", "right"]].set_visible(False)
 
     # --- Panel 3: iteration-depth cliff (Day 15) ---
-    for key, curve in depth["probe_curves"].items():
+    for key, raw_curve in depth["probe_curves"].items():
+        # int_keyed: a curve re-read from JSON is keyed "1"/"2", which plots as a
+        # CATEGORICAL axis and makes the int budget_bound_depths below never match.
+        curve = int_keyed(raw_curve)
         ds = sorted(curve)
         ax_depth.plot(ds, [curve[d] for d in ds], marker="o", linewidth=2, label=key)
         bound = depth["probe_summary"].get(key, {}).get("budget_bound_depths", [])
@@ -636,7 +664,8 @@ def plot_phase3_summary(report: dict, path: Path = PHASE3_SUMMARY_CHART_PATH) ->
                               color=LOSS_COLOUR, markeredgewidth=2.5)
     ax_depth.set_xlabel("Critic-loop budget (max_iterations)", fontsize=8)
     ax_depth.set_ylabel("holdout R²", fontsize=8)
-    ax_depth.set_xticks(sorted({d for c in depth["probe_curves"].values() for d in c}))
+    ax_depth.set_xticks(sorted({d for c in depth["probe_curves"].values()
+                                for d in int_keyed(c)}))
     ax_depth.set_title("Depth-response under forced deficiency (Day 15)\n"
                        "× = budget-bound (cut off, not done); natural sweep is flat",
                        fontsize=9, fontweight="bold")
@@ -663,6 +692,210 @@ def plot_phase3_summary(report: dict, path: Path = PHASE3_SUMMARY_CHART_PATH) ->
 
     fig.suptitle("CrewML — Phase 3 consolidated results (Days 12–17)",
                  fontsize=13, fontweight="bold")
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+SELF_REPAIR_CHART_PATH = CHARTS_DIR / "day20_self_repair.png"
+
+# Attempt-count colours for the Day-20 repair chart: recovered first try, needed
+# the second, or the budget was spent and the crash stood.
+REPAIR_COLOURS = {1: "#2a9d8f", 2: "#e9c46a", None: "#d1495b"}
+
+
+def plot_self_repair(report: dict, path: Path = SELF_REPAIR_CHART_PATH) -> Path:
+    """Two panels from ``results/day20_self_repair.json``: which injected faults the
+    repair loop recovered (and on which attempt), and how faithfully the repaired
+    runs reproduce the clean run's CV score. Controls are excluded from the left
+    panel (nothing was injected) but their scores anchor the fidelity deltas."""
+    injected = [r for r in report["runs"] if r["fault"] != "none_control"]
+    datasets = report["datasets"]
+    faults = list(dict.fromkeys(r["fault"] for r in injected))
+    by = {(r["dataset"], r["fault"]): r for r in injected}
+
+    fig, (ax_rec, ax_fid) = plt.subplots(
+        1, 2, figsize=(11.5, 0.5 * len(faults) + 2.8),
+        gridspec_kw={"width_ratios": [5, 4]},
+    )
+
+    # --- Left: recovery matrix — one marker per (fault, dataset) ------------
+    bar_h = 0.36
+    for j, ds in enumerate(datasets):
+        for i, fault in enumerate(faults):
+            r = by.get((ds, fault))
+            if r is None:
+                continue
+            attempt = r["recovered_on_attempt"] if r["recovered"] else None
+            y = i + (j - (len(datasets) - 1) / 2) * bar_h
+            width = attempt if attempt else report["max_attempts"]
+            unmeasured = bool(r.get("llm_unavailable"))
+            # Hatched grey, never the failure colour: a run the provider refused is
+            # not evidence about the loop, and must not read as one on the chart.
+            ax_rec.barh(
+                y, width, height=bar_h * 0.9,
+                color="#c9ced6" if unmeasured else REPAIR_COLOURS.get(attempt, REPAIR_COLOURS[None]),
+                hatch="//" if unmeasured else None,
+                edgecolor="#6b7a8f" if unmeasured else None,
+            )
+            if unmeasured:
+                label = "UNMEASURED (provider)"
+            elif attempt:
+                label = f"attempt {attempt}"
+            else:
+                label = "NOT recovered"
+            ax_rec.text(width + 0.05, y, f"{ds}: {label}", va="center", fontsize=7)
+    ax_rec.set_yticks(range(len(faults)))
+    ax_rec.set_yticklabels(faults, fontsize=8, family="monospace")
+    ax_rec.invert_yaxis()
+    ax_rec.set_xlim(0, report["max_attempts"] + 1.6)
+    ax_rec.set_xticks(range(0, report["max_attempts"] + 1))
+    ax_rec.set_xlabel("repair attempts consumed", fontsize=8)
+    rate = report["recovery_rate"]
+    denom = report.get("measurable_runs", report["n_injected_runs"])
+    rate_text = (
+        f"rate {report['recovered_runs']}/{denom} = {rate:.0%}"
+        if rate is not None
+        else "rate NOT MEASURABLE"
+    )
+    unmeasured_n = report.get("unmeasured_runs", 0)
+    if unmeasured_n:
+        rate_text += f" · {unmeasured_n} unmeasured"
+    ax_rec.set_title(
+        f"Recovery per injected fault — {rate_text}", fontsize=10, fontweight="bold",
+    )
+    ax_rec.spines[["top", "right"]].set_visible(False)
+
+    # --- Right: score fidelity of recovered runs vs the clean control -------
+    recovered = [r for r in injected if r["recovered"]
+                 and r["score_fidelity_vs_clean"] is not None]
+    ys, vals, labels, colours, hatches = [], [], [], [], []
+    for i, r in enumerate(recovered):
+        ys.append(i)
+        vals.append(r["score_fidelity_vs_clean"])
+        # A fault with no restorable intent CANNOT reproduce the control's feature
+        # set, so its non-zero delta is expected. Drawing it in the loss colour
+        # alongside a "mean |delta| = 0.0" title would read as a contradiction —
+        # and this figure travels separately from the report that explains it.
+        restorable = r.get("restorable", True)
+        labels.append(f"{r['dataset']}: {r['fault']}" + ("" if restorable else " ¹"))
+        colours.append((WIN_COLOUR if vals[-1] >= 0 else LOSS_COLOUR) if restorable
+                       else "#9aa5b4")
+        hatches.append(None if restorable else "//")
+    bars = ax_fid.barh(ys, vals, height=0.6, color=colours)
+    for bar, hatch in zip(bars, hatches):
+        if hatch:
+            bar.set_hatch(hatch)
+            bar.set_edgecolor("#6b7a8f")
+    ax_fid.axvline(0, color="#333", lw=0.8)
+    ax_fid.set_yticks(ys)
+    ax_fid.set_yticklabels(labels, fontsize=7, family="monospace")
+    ax_fid.invert_yaxis()
+    # Exact fidelity (every Δ == 0) is the *good* outcome, and also a degenerate
+    # axis — floor the span so the zero line stays visible instead of singular.
+    span = max(max((abs(v) for v in vals), default=0.0), 0.001)
+    ax_fid.set_xlim(-span * 1.6, span * 1.6)
+    ax_fid.set_xlabel("repaired CV score − clean CV score", fontsize=8)
+    n_scored = report.get("n_fidelity_scored")
+    scope = f" over {n_scored} restorable" if n_scored is not None else ""
+    subtitle = (
+        f"mean |Δ| = {report['mean_abs_score_fidelity']}{scope}"
+        if report.get("mean_abs_score_fidelity") is not None
+        else "no restorable runs scored"
+    )
+    ax_fid.set_title(
+        f"Score fidelity of repaired runs\n({subtitle})",
+        fontsize=10, fontweight="bold",
+    )
+    if any(not r.get("restorable", True) for r in recovered):
+        ax_fid.text(
+            0.5, -0.14,
+            "¹ no restorable intent — a non-zero Δ is EXPECTED here and is excluded "
+            "from the mean",
+            transform=ax_fid.transAxes, ha="center", va="top", fontsize=7,
+            color="#6b7a8f",
+        )
+    ax_fid.spines[["top", "right"]].set_visible(False)
+
+    # The honesty label travels with the figure: a chart gets separated from its
+    # JSON and its report, and a scripted-mode panel read as a capability result
+    # would be exactly the misreading the study's stamp exists to prevent.
+    if report.get("is_measurement_of_llm_capability", True):
+        fig.suptitle(
+            "CrewML — Day 20 self-repair: crashed generated code reads its own "
+            "traceback and comes back",
+            fontsize=12, fontweight="bold",
+        )
+    else:
+        fig.suptitle(
+            "CrewML — Day 20 self-repair MECHANISM check (deterministic "
+            "stand-in repairer — NOT an LLM measurement)\n"
+            "Injected faults detonate in the real Trainer, the loop fires, the "
+            "sandboxed re-run is adopted. Says nothing about model repair skill.",
+            fontsize=11, fontweight="bold",
+        )
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+LEAKAGE_WINDOW_CHART_PATH = CHARTS_DIR / "day22_leakage_window.png"
+
+
+def plot_leakage_window(report: dict, path: Path = LEAKAGE_WINDOW_CHART_PATH) -> Path:
+    """The Day-22 detection-window figure: one panel per metric, showing where
+    the calibrated single-feature ceiling sits between the strongest *legitimate*
+    feature (must stay below it — no false positives) and every *injected* leak
+    (must land above it — no misses). The gap between the two bands IS the
+    residual window, drawn rather than hidden: a leak engineered inside it would
+    still pass, which is exactly what the study's markdown discloses.
+    """
+    cal = report["calibration"]
+    metrics = list(cal["ceilings"].keys())
+    fig, axes = plt.subplots(1, len(metrics), figsize=(4.2 * len(metrics), 4.4))
+    if len(metrics) == 1:
+        axes = [axes]
+
+    for ax, metric in zip(axes, metrics):
+        ceiling = cal["ceilings"][metric]
+        clean = [
+            (key, d["strongest_feature"], d["strongest_score"])
+            for key, d in cal["clean_suite"].items() if d["metric"] == metric
+        ]
+        leaks = [d for d in cal["injected_leaks"] if d["metric"] == metric]
+
+        labels, values, colours = [], [], []
+        for key, feat, score in clean:
+            labels.append(f"{key}\n{feat} (clean max)")
+            values.append(score)
+            colours.append(SYSTEM_COLOURS["default_rf"])
+        for d in leaks:
+            labels.append(f"{d['base_dataset']}\nleak/{d['kind']}")
+            values.append(d["standalone_score"])
+            colours.append(LOSS_COLOUR)
+
+        pos = range(len(labels))
+        ax.bar(pos, values, color=colours, width=0.62)
+        ax.axhline(ceiling, color="#222222", linestyle="--", linewidth=1.2)
+        ax.text(len(labels) - 0.45, ceiling, f" ceiling {ceiling}", va="bottom",
+                ha="right", fontsize=8, fontweight="bold")
+        ax.set_xticks(list(pos))
+        ax.set_xticklabels(labels, fontsize=7)
+        ax.set_title(metric, fontsize=10, fontweight="bold")
+        ax.set_ylim(0, 1.05)
+        ax.grid(axis="y", alpha=0.25)
+        for p, v in zip(pos, values):
+            ax.text(p, v + 0.012, f"{v:.3f}", ha="center", fontsize=7)
+
+    fig.suptitle(
+        "CrewML — Day 22 single-feature leakage screen: clean features stay under "
+        "the calibrated ceiling, injected leaks land above it",
+        fontsize=11, fontweight="bold",
+    )
     fig.tight_layout()
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=150, bbox_inches="tight")

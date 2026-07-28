@@ -46,6 +46,7 @@ import time
 from contextlib import contextmanager
 from typing import Any, Iterable, Optional
 
+from crewml import budget as budget_mod
 from crewml.config import ARTIFACTS_DIR, MAX_ITERATIONS, RESULTS_DIR, is_mock_mode
 from crewml.crew import build_crew, initial_state
 from crewml.datasets import REGISTRY, load_manifest, verify_holdout_untouched
@@ -139,7 +140,11 @@ def run_variant(
     app = build_crew(variant=variant)
     state = initial_state(spec, max_iterations=max_iterations)
     limit = 3 + max_iterations * 4 + 10
-    final = app.invoke(state, config={"recursion_limit": limit})
+    # Every study run is scoped under a fresh run budget (Day 21, config-default
+    # caps) so a runaway variant is cost-bounded like a production run; the
+    # committed record schema is unchanged — the ledger lives in the run's report.
+    with budget_mod.run_budget():
+        final = app.invoke(state, config={"recursion_limit": limit})
     crew_seconds = time.time() - started
 
     # Seal must be intact before scoring — proves the variant never touched the holdout.
@@ -150,13 +155,24 @@ def run_variant(
 
     critiques = final.get("critiques") or []
     tmetrics = (final.get("training") or {}).get("metrics") or {}
+    _facts = extract_run_facts(final)
     record = {
         **scored,
         # Cost + loop-outcome facts (Day 15): token totals and whether the last Critic
         # pass was cut off by the budget rather than satisfied.
-        **extract_run_facts(final),
+        **_facts,
         "variant": variant,
-        "mock": is_mock_mode(),
+        # `is_mock_mode()` only checks whether a KEY IS PRESENT, so a configured but
+        # dead provider (revoked key, restricted org, exhausted quota) was recorded
+        # as a real live run. Trust the observed narrative count instead: a run with
+        # a key but zero live narratives is effectively a mock run and must be
+        # labelled as one. `mock_reason` keeps the two cases distinguishable.
+        "mock": bool(is_mock_mode() or not _facts.get("llm_narratives_live")),
+        "mock_reason": (
+            "no_key" if is_mock_mode()
+            else (None if _facts.get("llm_narratives_live")
+                  else "key_present_but_no_live_narratives")
+        ),
         "iterations_run": final.get("iteration"),
         "max_iterations": final.get("max_iterations"),
         "loop_fired": bool((final.get("iteration") or 0) > 1),
