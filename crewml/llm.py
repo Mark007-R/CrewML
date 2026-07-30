@@ -14,6 +14,7 @@ The honesty rule (EVAL_PROTOCOL.md §5): a result produced without a live LLM is
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass
 
 from crewml import budget, config
@@ -119,6 +120,7 @@ def chat(
     run_budget = budget.active()
     if run_budget is not None:
         run_budget.enforce(agent=agent)  # raises BudgetExhaustedError when spent
+    started = time.monotonic()
     if config.LLM_PROVIDER == "groq":
         result = _chat_groq(system, user, temperature=temperature, max_tokens=max_tokens)
     elif config.LLM_PROVIDER in ("anthropic", "claude"):
@@ -130,6 +132,7 @@ def chat(
             agent=agent,
             prompt_tokens=result.prompt_tokens,
             completion_tokens=result.completion_tokens,
+            latency_s=time.monotonic() - started,  # Day 25 telemetry
         )
     return result
 

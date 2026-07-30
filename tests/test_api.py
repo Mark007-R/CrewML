@@ -31,6 +31,15 @@ FAKE_RESULT = {
     },
     "manifest": {"schema_version": 1, "result_fingerprint": "f" * 64},
     "model_card": "# Model Card\n\nCV estimate; holdout untouched.",
+    "telemetry": {
+        "schema_version": 1,
+        "duration_s": 12.5,
+        "llm": {"n_calls": 3, "n_refused": 0, "tokens_spent": 2400,
+                "llm_time_s": 2.1},
+        "cache": {"n_hits": 1, "n_misses": 1, "n_bypassed": 0, "n_stored": 1,
+                  "hit_rate": 0.5},
+        "outcome": {"final_cv_score": 0.79, "cv_score_is_holdout": False},
+    },
 }
 
 
@@ -198,3 +207,60 @@ def test_run_request_schema_has_no_path_fields():
     fields = set(RunRequest.model_fields)
     assert fields == {"dataset_key", "max_iterations", "param_search", "llm",
                       "token_budget", "time_budget_s"}
+
+
+# --- Day 25: telemetry surfaces + /metrics -----------------------------------
+
+def test_status_carries_the_compact_cost_line(harness):
+    client, _, _ = harness
+    rid = client.post("/run", json={"dataset_key": "credit-g"}).json()["run_id"]
+    tel = client.get(f"/status/{rid}").json()["telemetry"]
+    assert tel == {"duration_s": 12.5, "tokens_spent": 2400, "llm_calls": 3,
+                   "cache_hits": 1, "cache_hit_rate": 0.5}
+
+
+def test_report_carries_full_telemetry(harness):
+    client, _, _ = harness
+    rid = client.post("/run", json={"dataset_key": "credit-g"}).json()["run_id"]
+    tel = client.get(f"/report/{rid}").json()["telemetry"]
+    assert tel["llm"]["tokens_spent"] == 2400
+    assert tel["cache"]["n_hits"] == 1
+    assert tel["outcome"]["cv_score_is_holdout"] is False
+
+
+def test_metrics_aggregates_over_runs(harness):
+    client, _, _ = harness
+    for _ in range(2):
+        client.post("/run", json={"dataset_key": "credit-g"})
+
+    m = client.get("/metrics").json()
+    assert m["service"]["version"]
+    assert m["runs"]["total"] == 2
+    assert m["runs"]["by_status"]["succeeded"] == 2
+    assert m["runs"]["success_rate"] == 1.0
+    assert m["latency"]["mean_s"] == 12.5
+    assert m["llm"]["tokens_spent"] == 4800
+    assert m["cache"]["hit_rate"] == 0.5
+    assert m["datasets"]["credit-g"]["best_cv_score"] == 0.79
+    assert m["cv_score_is_holdout"] is False
+
+
+def test_metrics_on_a_fresh_service_is_empty_not_broken(harness):
+    client, _, _ = harness
+    m = client.get("/metrics").json()
+    assert m["runs"]["total"] == 0
+    assert m["runs"]["success_rate"] is None
+    assert m["datasets"] == {}
+
+
+def test_failed_run_still_gets_duration_telemetry(tmp_path):
+    store = RunStore(tmp_path / "runs.sqlite")
+
+    def boom(params):
+        raise ValueError("executor exploded")
+
+    client = TestClient(create_app(store, JobRunner(store, execute=boom, sync=True)))
+    rid = client.post("/run", json={"dataset_key": "vehicle"}).json()["run_id"]
+    tel = store.get(rid)["telemetry"]
+    assert tel["duration_s"] >= 0.0
+    assert tel["llm"]["n_calls"] == 0  # spend died with the run's ledger — unmeasured, not invented

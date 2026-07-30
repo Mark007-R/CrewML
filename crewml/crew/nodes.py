@@ -20,9 +20,14 @@ of the Critic — because the loop budget is a safety property.
 """
 from __future__ import annotations
 
+import os
 from typing import Any
 
-from crewml.config import MAX_ITERATIONS
+from crewml import cache
+from crewml import leakage as _leakage_mod
+from crewml.config import MAX_ITERATIONS, SEED
+from crewml.crew import planner as _planner_mod
+from crewml.crew import profiler as _profiler_mod
 from crewml.crew.critic import run_critic
 from crewml.crew.ensembler import run_ensembler
 from crewml.crew.feature_engineer import run_feature_engineer, run_identity_fe
@@ -32,25 +37,82 @@ from crewml.crew.profiler import run_profiler
 from crewml.crew.reporter import run_reporter
 from crewml.crew.state import CrewState
 from crewml.crew.trainer import run_trainer
+from crewml.manifest import dataset_seals
+
+
+# --- Node-cache pins (Day 25) ------------------------------------------------
+# A profile is a deterministic function of (train bytes, profiler+leakage code,
+# schema, LLM identity); a FIRST-PASS plan of (profile core, planner code,
+# schema, seed, ablation switch, LLM identity). The pins name those inputs
+# exactly — anything else changing MUST miss, so a hit is provably the same
+# answer the node would recompute (the warm-run fingerprint test pins this).
+
+def _profile_pins(dataset_key: str) -> dict[str, Any]:
+    return {
+        "dataset_key": dataset_key,
+        # Only the train split identifies a profile — the crew never sees more.
+        "train_sha256": dataset_seals(dataset_key)["train_sha256"],
+        "profile_schema": _profiler_mod.PROFILE_SCHEMA_VERSION,
+        "code_sha256": cache.source_sha256(_profiler_mod, _leakage_mod),
+        "llm": cache.llm_pins("CREWML_PROFILER_LLM"),
+    }
+
+
+def _plan_pins(state: CrewState) -> dict[str, Any]:
+    return {
+        "dataset_key": state["dataset_key"],
+        "profile_sha256": cache.content_hash(state["profile"]),
+        "plan_schema": _planner_mod.PLAN_SCHEMA_VERSION,
+        "code_sha256": cache.source_sha256(_planner_mod),
+        "seed": SEED,
+        "ablation_handicap": os.getenv("CREWML_ABLATION_HANDICAP", "0"),
+        "llm": cache.llm_pins("CREWML_PLANNER_LLM"),
+    }
+
+
+def _event(node: str, kind: str, **fields: Any) -> dict[str, Any]:
+    return {"node": node, "kind": kind, **fields}
 
 
 # --- Linear front half: Profiler -> Planner -> Feature Engineer -> Trainer ---
 
 def profiler(state: CrewState) -> dict[str, Any]:
-    """Profiler (REAL — Day 7). Train-only EDA -> structured DataProfile.
+    """Profiler (REAL — Day 7; cached Day 25). Train-only EDA -> structured DataProfile.
 
     The first stub retired: computes schema, dtypes, missingness (incl. suspected
     disguised-missing zeros), the target distribution + class imbalance, and basic
     leakage checks — all deterministically, with an optional advisory LLM briefing
     layered on top (see :mod:`crewml.crew.profiler`). Reads only the ``train``
     split; the profile it returns is what the Planner (Day 8) reasons over.
+
+    Day 25: the profile is memoised through :mod:`crewml.cache`, pinned to the
+    train split's sha256 + the profiler/leakage code + the LLM identity. A hit
+    returns the byte-identical profile without touching data or provider; a
+    dataset without Day-1 seals (or a cache failure) bypasses, never crashes.
     """
-    profile = run_profiler(state["dataset_key"])
-    return {"profile": profile, "trace": ["profiler"]}
+    key = state["dataset_key"]
+    try:
+        pins: dict[str, Any] | None = _profile_pins(key)
+    except Exception:
+        pins = None  # unsealed dataset — profile identity unpinnable, run cold
+    if pins is None:
+        profile = run_profiler(key)
+        events = [_event("profiler", "profile", bypass="no_dataset_seals")]
+    elif (cached := cache.lookup("profile", pins)) is not None:
+        return {"profile": cached, "trace": ["profiler"],
+                "cache_events": [_event("profiler", "profile", hit=True,
+                                        key=cached["cache"]["key"][:16])]}
+    else:
+        profile = run_profiler(key)
+        stored = (cache.value_cacheable(profile, pins["llm"])
+                  and cache.store("profile", pins, profile))
+        events = [_event("profiler", "profile", hit=False, stored=bool(stored),
+                         key=cache.cache_key("profile", pins)[:16])]
+    return {"profile": profile, "trace": ["profiler"], "cache_events": events}
 
 
 def planner(state: CrewState) -> dict[str, Any]:
-    """Planner (REAL — Day 8). Read the DataProfile -> structured ModelingPlan.
+    """Planner (REAL — Day 8; first pass cached Day 25). DataProfile -> ModelingPlan.
 
     The second stub retired: reasons purely over the profile the Profiler produced
     (never the data) to decide column drops, dtype-aware preprocessing, candidate
@@ -59,14 +121,31 @@ def planner(state: CrewState) -> dict[str, Any]:
     :mod:`crewml.crew.planner`). On a Critic-triggered re-entry it consumes the latest
     critique and adjusts the plan; on the first pass ``critiques`` is empty and the
     plan is built from the profile alone. Feeds the Feature Engineer + Trainer (Day 9).
+
+    Day 25: only the FIRST pass is memoised — a critique-adjusted plan depends
+    on the run's own history and always builds live (recorded as a ``bypass``
+    cache event, so telemetry shows the loop ran rather than a cache miss).
     """
     critiques = state.get("critiques") or []
-    plan = run_planner(
-        state["profile"],
-        critique=critiques[-1] if critiques else None,
-        iteration=state.get("iteration", 0),
-    )
-    return {"plan": plan, "trace": ["planner"]}
+    iteration = state.get("iteration", 0)
+    if critiques or iteration:
+        plan = run_planner(state["profile"],
+                           critique=critiques[-1] if critiques else None,
+                           iteration=iteration)
+        return {"plan": plan, "trace": ["planner"],
+                "cache_events": [_event("planner", "plan", bypass="critique_reentry")]}
+
+    pins = _plan_pins(state)
+    if (cached := cache.lookup("plan", pins)) is not None:
+        return {"plan": cached, "trace": ["planner"],
+                "cache_events": [_event("planner", "plan", hit=True,
+                                        key=cached["cache"]["key"][:16])]}
+    plan = run_planner(state["profile"])
+    stored = (cache.value_cacheable(plan, pins["llm"])
+              and cache.store("plan", pins, plan))
+    return {"plan": plan, "trace": ["planner"],
+            "cache_events": [_event("planner", "plan", hit=False, stored=bool(stored),
+                                    key=cache.cache_key("plan", pins)[:16])]}
 
 
 def feature_engineer(state: CrewState) -> dict[str, Any]:

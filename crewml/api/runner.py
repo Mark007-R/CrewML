@@ -21,11 +21,13 @@ a held-out score.
 from __future__ import annotations
 
 import os
+import time
 from contextlib import contextmanager
 from typing import Any, Optional
 
 from crewml import budget as budget_mod
 from crewml import manifest as manifest_mod
+from crewml import telemetry as telemetry_mod
 from crewml.config import MAX_ITERATIONS
 from crewml.crew import build_crew, initial_state
 from crewml.datasets import REGISTRY, verify_holdout_untouched
@@ -104,13 +106,25 @@ def execute_crew_run(params: dict[str, Any]) -> dict[str, Any]:
     app = build_crew()
     state = initial_state(spec, max_iterations=max_iterations)
     limit = 3 + max_iterations * 4 + 10
+    started = time.monotonic()
     with _env_overrides(overrides):
-        with budget_mod.run_budget(token_budget, time_budget_s):
+        with budget_mod.run_budget(token_budget, time_budget_s) as ledger:
             final = app.invoke(state, config={"recursion_limit": limit})
+            budget_snapshot = ledger.snapshot()
+    duration_s = time.monotonic() - started
 
     report = final.get("report") or {}
+    record = build_run_record(spec, final)
     return {
-        "record": build_run_record(spec, final),
+        "record": record,
         "manifest": manifest_mod.build_run_manifest(final),
         "model_card": report.get("model_card_markdown") or "",
+        # Day 25: measurement, not result — stored beside the run, aggregated
+        # by GET /metrics, and never part of the result fingerprint.
+        "telemetry": telemetry_mod.build_run_telemetry(
+            duration_s=duration_s,
+            budget_snapshot=budget_snapshot,
+            cache_events=final.get("cache_events"),
+            record=record,
+        ),
     }

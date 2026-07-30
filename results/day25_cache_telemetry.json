@@ -1,0 +1,172 @@
+{
+  "schema_version": 1,
+  "labels": {
+    "deterministic_core_only": true,
+    "llm_narratives": "disabled for the study \u2014 savings shown are the recomputation (leakage-screen CV etc.), not provider latency",
+    "is_measurement_of_llm_capability": false,
+    "scores_are_cv_on_train": true,
+    "param_search": false
+  },
+  "environment": {
+    "provider": "groq",
+    "mock_mode": false
+  },
+  "node_timings": [
+    {
+      "dataset": "credit-g",
+      "cold_s": 0.362,
+      "warm_s": 0.002,
+      "saved_s": 0.36,
+      "speedup": 181.0,
+      "warm_hits": 2,
+      "warm_answer_identical": true
+    },
+    {
+      "dataset": "diabetes",
+      "cold_s": 0.142,
+      "warm_s": 0.003,
+      "saved_s": 0.139,
+      "speedup": 47.3,
+      "warm_hits": 2,
+      "warm_answer_identical": true
+    },
+    {
+      "dataset": "vehicle",
+      "cold_s": 0.264,
+      "warm_s": 0.003,
+      "saved_s": 0.261,
+      "speedup": 88.0,
+      "warm_hits": 2,
+      "warm_answer_identical": true
+    },
+    {
+      "dataset": "cpu_small",
+      "cold_s": 0.172,
+      "warm_s": 0.002,
+      "saved_s": 0.17,
+      "speedup": 86.0,
+      "warm_hits": 2,
+      "warm_answer_identical": true
+    },
+    {
+      "dataset": "kin8nm",
+      "cold_s": 0.148,
+      "warm_s": 0.001,
+      "saved_s": 0.147,
+      "speedup": 148.0,
+      "warm_hits": 2,
+      "warm_answer_identical": true
+    }
+  ],
+  "api_round_trip": {
+    "dataset": "credit-g",
+    "runs": [
+      {
+        "label": "cold",
+        "status": "succeeded",
+        "error": null,
+        "duration_s": 23.156,
+        "tokens_spent": 0,
+        "cache": {
+          "n_events": 2,
+          "n_hits": 0,
+          "n_misses": 2,
+          "n_bypassed": 0,
+          "n_stored": 2,
+          "hit_rate": 0.0
+        },
+        "cache_events": [
+          {
+            "node": "profiler",
+            "kind": "profile",
+            "hit": false,
+            "stored": true,
+            "key": "5f27ff232e7ef1ed"
+          },
+          {
+            "node": "planner",
+            "kind": "plan",
+            "hit": false,
+            "stored": true,
+            "key": "60cad4a6bf8af306"
+          }
+        ],
+        "final_cv_score": 0.797173,
+        "result_fingerprint": "8874e648ad83ea66ee0df1481e4d18644402f7905d1e15ea28ef618ce0126a5f"
+      },
+      {
+        "label": "warm",
+        "status": "succeeded",
+        "error": null,
+        "duration_s": 23.25,
+        "tokens_spent": 0,
+        "cache": {
+          "n_events": 2,
+          "n_hits": 2,
+          "n_misses": 0,
+          "n_bypassed": 0,
+          "n_stored": 0,
+          "hit_rate": 1.0
+        },
+        "cache_events": [
+          {
+            "node": "profiler",
+            "kind": "profile",
+            "hit": true,
+            "key": "5f27ff232e7ef1ed"
+          },
+          {
+            "node": "planner",
+            "kind": "plan",
+            "hit": true,
+            "key": "60cad4a6bf8af306"
+          }
+        ],
+        "final_cv_score": 0.797173,
+        "result_fingerprint": "8874e648ad83ea66ee0df1481e4d18644402f7905d1e15ea28ef618ce0126a5f"
+      }
+    ],
+    "same_result_fingerprint": true,
+    "metrics_payload": {
+      "runs": {
+        "total": 2,
+        "by_status": {
+          "queued": 0,
+          "running": 0,
+          "succeeded": 2,
+          "failed": 0
+        },
+        "success_rate": 1.0
+      },
+      "latency": {
+        "n_measured": 2,
+        "mean_s": 23.203,
+        "p50_s": 23.156,
+        "p95_s": 23.25
+      },
+      "llm": {
+        "n_calls": 0,
+        "n_refused": 0,
+        "tokens_spent": 0,
+        "llm_time_s": 0.0
+      },
+      "cache": {
+        "n_hits": 2,
+        "n_misses": 2,
+        "n_bypassed": 0,
+        "n_stored": 2,
+        "hit_rate": 0.5
+      },
+      "datasets": {
+        "credit-g": {
+          "metric": "roc_auc",
+          "n_runs": 2,
+          "n_succeeded": 2,
+          "mean_cv_score": 0.797173,
+          "best_cv_score": 0.797173
+        }
+      },
+      "cv_score_is_holdout": false
+    }
+  }
+}

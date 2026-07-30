@@ -901,3 +901,76 @@ def plot_leakage_window(report: dict, path: Path = LEAKAGE_WINDOW_CHART_PATH) ->
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return path
+
+
+CACHE_TELEMETRY_CHART_PATH = CHARTS_DIR / "day25_cache_telemetry.png"
+
+CACHE_COLD_COLOUR = "#6b7a8f"
+CACHE_WARM_COLOUR = "#2a9d8f"
+
+
+def plot_cache_telemetry(report: dict, path: Path = CACHE_TELEMETRY_CHART_PATH) -> Path:
+    """Two panels from ``results/day25_cache_telemetry.json``: Profiler+Planner
+    node seconds cold vs warm per dataset, and the two API round-trip runs with
+    their recorded cache hits. Warm bars are only drawn green because the study
+    asserted the warm answer is byte-identical — the speedup is real only
+    because the result is the same, and the caption says so.
+    """
+    rows = report["node_timings"]
+    api = report["api_round_trip"]
+
+    fig, (ax_nodes, ax_api) = plt.subplots(
+        1, 2, figsize=(11.5, 4.4), gridspec_kw={"width_ratios": [3, 2]},
+    )
+
+    # --- Left: node timings, cold vs warm ------------------------------------
+    pos = range(len(rows))
+    width = 0.38
+    ax_nodes.bar([p - width / 2 for p in pos], [r["cold_s"] for r in rows],
+                 width=width, color=CACHE_COLD_COLOUR, label="cold (computed)")
+    ax_nodes.bar([p + width / 2 for p in pos], [r["warm_s"] for r in rows],
+                 width=width, color=CACHE_WARM_COLOUR, label="warm (cache hit)")
+    for p, r in zip(pos, rows):
+        ax_nodes.text(p - width / 2, r["cold_s"], f"{r['cold_s']}s",
+                      ha="center", va="bottom", fontsize=7)
+        speedup = f"{r['speedup']}x" if r.get("speedup") is not None else ""
+        ax_nodes.text(p + width / 2, r["warm_s"], f"{r['warm_s']}s\n{speedup}",
+                      ha="center", va="bottom", fontsize=7)
+    ax_nodes.set_xticks(list(pos))
+    ax_nodes.set_xticklabels([r["dataset"] for r in rows], fontsize=8)
+    ax_nodes.set_ylabel("Profiler + Planner nodes (s)", fontsize=8)
+    ax_nodes.set_title("Node cache: cold vs warm (answers byte-identical)",
+                       fontsize=9, fontweight="bold")
+    ax_nodes.legend(fontsize=8)
+    ax_nodes.grid(axis="y", alpha=0.25)
+
+    # --- Right: the API round-trip -------------------------------------------
+    runs = api["runs"]
+    pos_api = range(len(runs))
+    colours = [CACHE_COLD_COLOUR if r["label"] == "cold" else CACHE_WARM_COLOUR
+               for r in runs]
+    durations = [r.get("duration_s") or 0.0 for r in runs]
+    ax_api.bar(pos_api, durations, color=colours, width=0.55)
+    for p, r, d in zip(pos_api, runs, durations):
+        hits = (r.get("cache") or {}).get("n_hits", 0)
+        ax_api.text(p, d, f"{d}s\n{hits} cache hit(s)", ha="center",
+                    va="bottom", fontsize=8)
+    ax_api.set_xticks(list(pos_api))
+    ax_api.set_xticklabels([r["label"] for r in runs], fontsize=9)
+    ax_api.set_ylabel("full crew run via API (s)", fontsize=8)
+    ax_api.set_ylim(0, max(durations) * 1.22 if any(durations) else 1)
+    fp = api.get("same_result_fingerprint")
+    ax_api.set_title(f"API runs on {api['dataset']} — same result fingerprint: {fp}",
+                     fontsize=9, fontweight="bold")
+    ax_api.grid(axis="y", alpha=0.25)
+
+    fig.suptitle(
+        "CrewML — Day 25 node cache & telemetry (deterministic core; LLM narratives "
+        "disabled — savings are avoided recomputation, not provider latency)",
+        fontsize=11, fontweight="bold",
+    )
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path

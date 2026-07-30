@@ -17,11 +17,13 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
 import traceback
 from typing import Any, Callable, Optional
 
 from crewml.api.runner import execute_crew_run
 from crewml.api.store import RunStore
+from crewml.telemetry import build_run_telemetry
 
 ExecuteFn = Callable[[dict[str, Any]], dict[str, Any]]
 
@@ -65,17 +67,25 @@ class JobRunner:
 
     def _run_one(self, run_id: str, params: dict[str, Any]) -> None:
         self.store.mark_running(run_id)
+        started = time.monotonic()
         try:
             result = self.execute(params)
         except Exception as exc:  # any failure -> recorded, worker survives
             tb_last = traceback.format_exception_only(type(exc), exc)[-1].strip()
-            self.store.finish_failure(run_id, tb_last)
+            # A crashed run still gets duration telemetry; its LLM spend died
+            # with the run's ledger, so the zeros here mean "unmeasured", and
+            # /metrics only aggregates what actually got recorded.
+            self.store.finish_failure(
+                run_id, tb_last,
+                telemetry=build_run_telemetry(duration_s=time.monotonic() - started),
+            )
             return
         self.store.finish_success(
             run_id,
             record=result.get("record") or {},
             manifest=result.get("manifest") or {},
             model_card=result.get("model_card") or "",
+            telemetry=result.get("telemetry"),
         )
 
     # --- test/shutdown support ----------------------------------------------

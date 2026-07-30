@@ -57,6 +57,10 @@ class CrewState(TypedDict, total=False):
     # --- Append-only history channels (reducer = list concat) ---
     critiques: Annotated[list[dict[str, Any]], operator.add]  # one entry per Critic pass
     trace: Annotated[list[str], operator.add]                 # ordered node-visit log
+    # Day 25: one entry per node cache decision (hit/miss/bypass) — telemetry
+    # provenance only. Deliberately NOT part of `trace` and never part of the
+    # Day-23 result fingerprint: a cache hit must be outcome-invisible.
+    cache_events: Annotated[list[dict[str, Any]], operator.add]
 
 
 def initial_state(spec: DatasetSpec, *, max_iterations: int) -> CrewState:
@@ -82,4 +86,5 @@ def initial_state(spec: DatasetSpec, *, max_iterations: int) -> CrewState:
         iteration=0,
         critiques=[],
         trace=[],
+        cache_events=[],
     )

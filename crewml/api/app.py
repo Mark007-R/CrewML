@@ -13,9 +13,12 @@ Endpoints:
                             ``dataset_key`` — CSV upload lands Day 26 with an
                             API-side sealed split, per the Phase-5 plan.
 * ``GET  /status/{id}``   — lifecycle + headline outcome, small payload.
-* ``GET  /report/{id}``   — full record + Day-23 manifest + model card
-                            (409 until the run finishes).
+* ``GET  /report/{id}``   — full record + Day-23 manifest + model card +
+                            telemetry (409 until the run finishes).
 * ``GET  /runs``          — recent runs, newest first.
+* ``GET  /metrics``       — Day 25: service-level aggregates over every run —
+                            status counts, latency percentiles, LLM token/time
+                            spend, node-cache hit rate, per-dataset scores.
 
 Scores surfaced here are CV-on-train estimates (``cv_score_is_holdout:
 false``); the manifest's seals prove the holdout stayed untouched.
@@ -32,7 +35,7 @@ from crewml.api.jobs import JobRunner
 from crewml.api.store import RunStore
 from crewml.datasets import REGISTRY
 
-API_VERSION = "0.1.0"  # Day 24
+API_VERSION = "0.2.0"  # Day 24 routes + Day 25 caching & telemetry
 
 
 class RunRequest(BaseModel):
@@ -69,6 +72,15 @@ def _status_view(row: dict[str, Any]) -> dict[str, Any]:
             "cv_score_is_holdout": record.get("cv_score_is_holdout", False),
             "iterations_run": record.get("iterations_run"),
             "holdout_untouched": record.get("holdout_untouched"),
+        }
+    tel = row.get("telemetry") or {}
+    if tel:  # Day 25: the cost line, kept as small as the headline
+        view["telemetry"] = {
+            "duration_s": tel.get("duration_s"),
+            "tokens_spent": (tel.get("llm") or {}).get("tokens_spent"),
+            "llm_calls": (tel.get("llm") or {}).get("n_calls"),
+            "cache_hits": (tel.get("cache") or {}).get("n_hits"),
+            "cache_hit_rate": (tel.get("cache") or {}).get("hit_rate"),
         }
     return view
 
@@ -141,11 +153,24 @@ def create_app(store: Optional[RunStore] = None,
             "record": row.get("record"),
             "manifest": row.get("manifest"),
             "model_card": row.get("model_card"),
+            "telemetry": row.get("telemetry"),
         }
 
     @app.get("/runs")
     def list_runs(limit: int = 50) -> dict[str, Any]:
         return {"runs": [_status_view(r) for r in store.list(limit=limit)]}
+
+    @app.get("/metrics")
+    def metrics() -> dict[str, Any]:
+        """Day 25: service-level aggregates over every recorded run."""
+        return {
+            "service": {
+                "version": API_VERSION,
+                "provider": LLM_PROVIDER,
+                "mock_mode": is_mock_mode(),
+            },
+            **store.metrics(),
+        }
 
     return app
 

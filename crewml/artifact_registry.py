@@ -62,9 +62,10 @@ class DerivedArtifact:
 
 def _markdown_artifacts() -> list[DerivedArtifact]:
     from crewml import (
-        ablation, agent_ablation, budget_study, comparison, failure_taxonomy,
-        iteration_depth, leaderboard, leakage_study, phase3_results,
-        provider_study, repro_study, self_repair_study,
+        ablation, agent_ablation, budget_study, cache_telemetry_study,
+        comparison, failure_taxonomy, iteration_depth, leaderboard,
+        leakage_study, phase3_results, provider_study, repro_study,
+        self_repair_study,
     )
 
     specs = [
@@ -103,6 +104,9 @@ def _markdown_artifacts() -> list[DerivedArtifact]:
         (repro_study.REPORT_MD_PATH,
          RESULTS_DIR / "day23_reproducibility.json",
          repro_study.render_markdown, "Day 23 reproducibility study"),
+        (cache_telemetry_study.STUDY_MD_PATH,
+         RESULTS_DIR / "day25_cache_telemetry.json",
+         cache_telemetry_study.render_markdown, "Day 25 cache & telemetry study"),
     ]
     return [
         DerivedArtifact(path=p, source=s, kind="markdown", render=r, why=w)
@@ -139,6 +143,9 @@ def _chart_artifacts() -> list[DerivedArtifact]:
          RESULTS_DIR / "day22_leakage_honesty.json",
          charts.plot_leakage_window,
          "Day 22 window chart — shipped unregistered; caught by the sweep"),
+        (charts.CACHE_TELEMETRY_CHART_PATH,
+         RESULTS_DIR / "day25_cache_telemetry.json",
+         charts.plot_cache_telemetry, "Day 25 cache & telemetry chart"),
     ]
     return [
         DerivedArtifact(path=p, source=s, kind="chart", render=r, why=w)
