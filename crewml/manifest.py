@@ -103,7 +103,25 @@ def _crewml_env() -> dict[str, str]:
 
 
 def dataset_seals(dataset_key: str) -> dict[str, Any]:
-    """The locked split identity this run stands on, from the Day-1 manifest."""
+    """The locked split identity this run stands on.
+
+    Benchmark keys read the committed Day-1 manifest; uploaded datasets
+    (Day 26, ``upload-*``) read the per-upload manifest sealed at ingestion —
+    same shape, so a run manifest over user data carries the same seal
+    evidence. Lazy import: :mod:`crewml.uploads` imports the datasets module.
+    """
+    if dataset_key.startswith("upload-"):
+        from crewml.uploads import load_upload_manifest
+
+        entry = load_upload_manifest(dataset_key)
+        return {
+            "split_seed": entry["seed"],
+            "train_sha256": entry["train_sha256"],
+            "holdout_sha256": entry["holdout_sha256"],
+            "n_train": entry["n_train"],
+            "n_holdout": entry["n_holdout"],
+            "sealed_at_ingestion": True,
+        }
     manifest_path = config.RESULTS_DIR / "dataset_manifest.json"
     recorded = json.loads(manifest_path.read_text(encoding="utf-8"))
     entry = recorded["datasets"][dataset_key]

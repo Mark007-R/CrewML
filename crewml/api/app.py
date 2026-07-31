@@ -9,10 +9,19 @@ and runner so tests exercise the real routes against a fake executor.
 Endpoints:
 
 * ``GET  /healthz``       — liveness + provider/mock mode + known datasets.
+* ``GET  /datasets``      — Day 26: registry specs (benchmark + restored
+                            uploads) so the dashboard never hardcodes them.
+* ``POST /upload``        — Day 26: multipart CSV + a CHOSEN target column.
+                            Ingestion derives task/subtype/metric per
+                            EVAL_PROTOCOL, splits server-side, SHA-256 seals
+                            the holdout, registers the dataset, and returns
+                            the derivation so a wrong pick is visible before
+                            any run. The target is never guessed.
 * ``POST /run``           — submit a run (202 + run_id); body names a registered
-                            ``dataset_key`` — CSV upload lands Day 26 with an
-                            API-side sealed split, per the Phase-5 plan.
-* ``GET  /status/{id}``   — lifecycle + headline outcome, small payload.
+                            ``dataset_key`` (benchmark or upload).
+* ``GET  /status/{id}``   — lifecycle + headline outcome, small payload; while
+                            running, carries the Day-26 live progress snapshot
+                            (node trace / iteration) for the dashboard.
 * ``GET  /report/{id}``   — full record + Day-23 manifest + model card +
                             telemetry (409 until the run finishes).
 * ``GET  /runs``          — recent runs, newest first.
@@ -27,15 +36,18 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from crewml.config import MAX_ITERATIONS, is_mock_mode, LLM_PROVIDER
 from crewml.api.jobs import JobRunner
 from crewml.api.store import RunStore
-from crewml.datasets import REGISTRY
+from crewml.datasets import REGISTRY, spec_asdict
+from crewml.uploads import UploadError, ingest_csv, restore_uploaded_datasets
 
-API_VERSION = "0.2.0"  # Day 24 routes + Day 25 caching & telemetry
+API_VERSION = "0.3.0"  # Day 26: CSV upload + sealed split + live progress
+
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # a 50 MB CSV is already ~500k rows
 
 
 class RunRequest(BaseModel):
@@ -63,6 +75,8 @@ def _status_view(row: dict[str, Any]) -> dict[str, Any]:
         "finished_at": row.get("finished_at"),
         "error": row.get("error"),
     }
+    if row.get("progress") and row["status"] == "running":
+        view["progress"] = row["progress"]  # Day 26: live agent trace
     record = row.get("record") or {}
     if record:
         fm = record.get("final_model") or {}
@@ -89,6 +103,9 @@ def create_app(store: Optional[RunStore] = None,
                runner: Optional[JobRunner] = None) -> FastAPI:
     store = store or RunStore()
     runner = runner or JobRunner(store)
+    # Day 26: the registry is in-memory; sealed uploads on disk must survive an
+    # API restart or their run submissions would 404 for no honest reason.
+    restore_uploaded_datasets()
 
     app = FastAPI(title="CrewML API", version=API_VERSION,
                   description="Submit tabular ML tasks to the CrewML multi-agent crew.")
@@ -105,6 +122,35 @@ def create_app(store: Optional[RunStore] = None,
             "mock_mode": is_mock_mode(),
             "datasets": list(REGISTRY),
         }
+
+    @app.get("/datasets")
+    def datasets() -> dict[str, Any]:
+        """Registry specs, so the dashboard renders choices it never hardcodes."""
+        return {"datasets": {k: spec_asdict(s) for k, s in REGISTRY.items()}}
+
+    @app.post("/upload", status_code=201)
+    async def upload_csv(
+        file: UploadFile = File(...),
+        target_column: str = Form(...),
+    ) -> dict[str, Any]:
+        """Ingest a CSV under the Day-26 honesty rules.
+
+        The uploader CHOSE ``target_column`` — the API validates the choice,
+        derives task/subtype/metric from it (never from a guess), splits and
+        SHA-256-seals the holdout server-side, and registers the dataset. The
+        response is the upload manifest: the caller sees exactly what was
+        derived and sealed before deciding to run.
+        """
+        csv_bytes = await file.read()
+        if len(csv_bytes) > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413,
+                                detail=f"file exceeds {MAX_UPLOAD_BYTES} bytes")
+        try:
+            manifest = ingest_csv(csv_bytes, target_column=target_column,
+                                  filename=file.filename)
+        except UploadError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+        return {"dataset_key": manifest["key"], "manifest": manifest}
 
     @app.post("/run", status_code=202)
     def submit_run(req: RunRequest) -> dict[str, Any]:

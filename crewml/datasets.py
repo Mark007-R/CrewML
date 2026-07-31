@@ -110,10 +110,17 @@ def verify_holdout_untouched(key: str) -> bool:
     """Return True iff the on-disk holdout still matches its manifest fingerprint.
 
     This is the honesty proof: if the crew (or anyone) altered the held-out set,
-    the SHA-256 will diverge and this returns False.
+    the SHA-256 will diverge and this returns False. Benchmark datasets are
+    checked against the committed Day-1 manifest; uploaded datasets (Day 26)
+    against the per-upload manifest sealed at ingestion. Lazy import because
+    :mod:`crewml.uploads` imports this module.
     """
-    manifest = load_manifest()
-    recorded = manifest["datasets"][key]["holdout_sha256"]
+    if key.startswith("upload-"):
+        from crewml.uploads import load_upload_manifest
+
+        recorded = load_upload_manifest(key)["holdout_sha256"]
+    else:
+        recorded = load_manifest()["datasets"][key]["holdout_sha256"]
     current = sha256_of_frame(load_holdout(key))
     return recorded == current
 

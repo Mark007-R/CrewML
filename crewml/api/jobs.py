@@ -15,6 +15,7 @@ path is identical code minus the queue hop.
 """
 from __future__ import annotations
 
+import inspect
 import queue
 import threading
 import time
@@ -68,8 +69,19 @@ class JobRunner:
     def _run_one(self, run_id: str, params: dict[str, Any]) -> None:
         self.store.mark_running(run_id)
         started = time.monotonic()
+        # Day 26: an executor that accepts on_progress gets a callback that
+        # snapshots live state into the store (the dashboard's agent trace).
+        # Feature-detected so plain fakes — `lambda params: ...` — still work.
+        kwargs: dict[str, Any] = {}
         try:
-            result = self.execute(params)
+            if "on_progress" in inspect.signature(self.execute).parameters:
+                kwargs["on_progress"] = (
+                    lambda p: self.store.update_progress(run_id, p)
+                )
+        except (TypeError, ValueError):
+            pass  # builtins/partials without introspectable signatures
+        try:
+            result = self.execute(params, **kwargs)
         except Exception as exc:  # any failure -> recorded, worker survives
             tb_last = traceback.format_exception_only(type(exc), exc)[-1].strip()
             # A crashed run still gets duration telemetry; its LLM spend died

@@ -52,7 +52,8 @@ CREATE TABLE IF NOT EXISTS runs (
     manifest    TEXT,
     model_card  TEXT,
     error       TEXT,
-    telemetry   TEXT
+    telemetry   TEXT,
+    progress    TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_runs_created_at ON runs (created_at);
 """
@@ -79,6 +80,9 @@ class RunStore:
             cols = {r[1] for r in conn.execute("PRAGMA table_info(runs)")}
             if "telemetry" not in cols:
                 conn.execute("ALTER TABLE runs ADD COLUMN telemetry TEXT")
+            # Day-26 migration: live progress for the dashboard's agent trace.
+            if "progress" not in cols:
+                conn.execute("ALTER TABLE runs ADD COLUMN progress TEXT")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path, timeout=30)
@@ -109,6 +113,19 @@ class RunStore:
             conn.execute(
                 "UPDATE runs SET status='running', started_at=? WHERE run_id=?",
                 (_utcnow(), run_id),
+            )
+
+    def update_progress(self, run_id: str, progress: dict[str, Any]) -> None:
+        """Day 26: overwrite the live-progress snapshot for a running crew run.
+
+        Written once per node visit by the streaming runner (~15 small writes
+        per run), read by the dashboard's /status polling. Progress is a
+        courtesy view, never part of the record — a lost write costs nothing.
+        """
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE runs SET progress=? WHERE run_id=?",
+                (json.dumps(progress, default=str), run_id),
             )
 
     def finish_success(self, run_id: str, *, record: dict[str, Any],
@@ -155,7 +172,7 @@ class RunStore:
     @staticmethod
     def _to_dict(row: sqlite3.Row) -> dict[str, Any]:
         d = dict(row)
-        for field in ("params", "record", "manifest", "telemetry"):
+        for field in ("params", "record", "manifest", "telemetry", "progress"):
             if d.get(field):
                 d[field] = json.loads(d[field])
         return d

@@ -23,7 +23,7 @@ from __future__ import annotations
 import os
 import time
 from contextlib import contextmanager
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from crewml import budget as budget_mod
 from crewml import manifest as manifest_mod
@@ -85,11 +85,38 @@ def build_run_record(spec, final: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def execute_crew_run(params: dict[str, Any]) -> dict[str, Any]:
+def _progress_view(state: dict[str, Any]) -> dict[str, Any]:
+    """The small live snapshot the dashboard polls while a run is executing.
+
+    Derived entirely from CrewState channels the graph already maintains — the
+    node-visit trace, the iteration counter, Critic decisions. Nothing here can
+    name a holdout: the state itself can't (structural, Day 5).
+    """
+    critiques = state.get("critiques") or []
+    trace = state.get("trace") or []
+    return {
+        "trace": trace,
+        "nodes_visited": len(trace),
+        "current_node": trace[-1] if trace else None,
+        "iteration": state.get("iteration"),
+        "max_iterations": state.get("max_iterations"),
+        "decisions": [c.get("decision") for c in critiques],
+    }
+
+
+def execute_crew_run(params: dict[str, Any],
+                     on_progress: Optional[Callable[[dict[str, Any]], None]] = None,
+                     ) -> dict[str, Any]:
     """Run the full crew per an API run request; return record/manifest/model card.
 
     ``params``: dataset_key (required, must be in REGISTRY), max_iterations,
     param_search (bool), llm (bool), token_budget, time_budget_s.
+
+    ``on_progress`` (Day 26): called with a :func:`_progress_view` snapshot
+    after every graph step — the dashboard's live agent trace. The run is
+    driven through ``app.stream(..., stream_mode="values")``, whose final
+    yielded state is exactly what ``invoke`` returns; a progress callback that
+    raises is swallowed so a flaky observer can never kill a crew run.
     """
     key = params["dataset_key"]
     spec = REGISTRY[key]
@@ -109,7 +136,16 @@ def execute_crew_run(params: dict[str, Any]) -> dict[str, Any]:
     started = time.monotonic()
     with _env_overrides(overrides):
         with budget_mod.run_budget(token_budget, time_budget_s) as ledger:
-            final = app.invoke(state, config={"recursion_limit": limit})
+            final: dict[str, Any] = state
+            for step_state in app.stream(
+                state, config={"recursion_limit": limit}, stream_mode="values",
+            ):
+                final = step_state
+                if on_progress is not None:
+                    try:
+                        on_progress(_progress_view(step_state))
+                    except Exception:
+                        pass  # observers never kill the run
             budget_snapshot = ledger.snapshot()
     duration_s = time.monotonic() - started
 
