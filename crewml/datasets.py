@@ -69,6 +69,12 @@ REGISTRY: dict[str, DatasetSpec] = {
     ),
 }
 
+# The five locked benchmark datasets, captured before any runtime registration.
+# Day-26 upload restoration mutates REGISTRY in place (by design — /run looks
+# every dataset up there), so benchmark-scoped code must enumerate THIS tuple,
+# not the live registry, or a restored upload silently widens "the suite".
+BENCHMARK_KEYS: tuple[str, ...] = tuple(sorted(REGISTRY))
+
 
 def dataset_dir(key: str) -> Path:
     return DATA_DIR / key

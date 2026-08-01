@@ -30,6 +30,15 @@ cache directory lives under the git-ignored ``artifacts/``.
 
 Every public function is fail-open: a corrupt entry, an unwritable directory,
 or a missing dataset seal degrades to "no cache", never to a crashed node.
+
+Backends (Day 27): entries live in per-process JSON files under the
+git-ignored ``artifacts/`` by default; setting ``CREWML_REDIS_URL`` switches
+lookup/store to a shared Redis with the identical entry schema, so hits
+survive container rebuilds and multiple API containers share one cache
+(docker-compose wires ``redis://redis:6379/0``). Redis inherits the fail-open
+rule twice over: an unreachable server degrades to the file backend — never a
+crashed node — and is remembered dead for the rest of the process so each call
+doesn't re-pay a connection timeout.
 """
 from __future__ import annotations
 
@@ -125,10 +134,96 @@ def value_cacheable(value: dict[str, Any], llm: dict[str, Any]) -> bool:
     return narrative.get("source") != "unavailable"
 
 
+# --- Redis backend (Day 27) ---------------------------------------------------
+
+_REDIS_DEAD = object()  # module-level memo: "configured but unreachable"
+_redis: Any = None      # None = not yet initialised; _REDIS_DEAD = gave up
+
+
+def redis_url() -> str:
+    """Shared-cache switch — empty (default) keeps the file backend."""
+    return os.getenv("CREWML_REDIS_URL", "").strip()
+
+
+def _redis_key(kind: str, key: str) -> str:
+    return f"crewml:cache:{kind}:{key}"
+
+
+def _redis_client() -> Optional[Any]:
+    """A live Redis client, or None (unconfigured, import failed, or dead).
+
+    The client is built once per process with 1-second socket timeouts and
+    ping-verified; any failure memoises _REDIS_DEAD so later lookups skip
+    straight to the file backend instead of re-paying the timeout. Tests
+    monkeypatch this function to inject fakes.
+    """
+    global _redis
+    url = redis_url()
+    if not url:
+        return None
+    if _redis is _REDIS_DEAD:
+        return None
+    if _redis is not None:
+        return _redis
+    try:
+        import redis as _redis_mod
+
+        client = _redis_mod.Redis.from_url(
+            url, socket_connect_timeout=1, socket_timeout=1,
+            decode_responses=True,
+        )
+        client.ping()
+        _redis = client
+        return _redis
+    except Exception:
+        _redis = _REDIS_DEAD
+        return None
+
+
+def _mark_redis_dead() -> None:
+    global _redis
+    _redis = _REDIS_DEAD
+
+
 # --- Store --------------------------------------------------------------------
 
 def _entry_path(kind: str, key: str) -> Path:
     return cache_dir() / f"{kind}-{key[:16]}.json"
+
+
+def _load_entry(kind: str, key: str) -> Optional[dict[str, Any]]:
+    """Fetch the raw entry dict from Redis (if configured+alive) else file."""
+    client = _redis_client()
+    if client is not None:
+        try:
+            raw = client.get(_redis_key(kind, key))
+            return json.loads(raw) if raw else None
+        except Exception:
+            _mark_redis_dead()  # fall through: file backend is never worse
+    try:
+        return json.loads(_entry_path(kind, key).read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _save_entry(kind: str, key: str, entry: dict[str, Any]) -> bool:
+    """Persist the entry to Redis (if configured+alive) else file (atomic)."""
+    client = _redis_client()
+    if client is not None:
+        try:
+            client.set(_redis_key(kind, key), json.dumps(entry, default=str))
+            return True
+        except Exception:
+            _mark_redis_dead()
+    path = _entry_path(kind, key)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(entry, default=str), encoding="utf-8")
+        os.replace(tmp, path)
+        return True
+    except Exception:
+        return False
 
 
 def lookup(kind: str, pins: dict[str, Any]) -> Optional[dict[str, Any]]:
@@ -136,9 +231,10 @@ def lookup(kind: str, pins: dict[str, Any]) -> Optional[dict[str, Any]]:
     if not enabled():
         return None
     key = cache_key(kind, pins)
-    path = _entry_path(kind, key)
+    entry = _load_entry(kind, key)
+    if entry is None:
+        return None
     try:
-        entry = json.loads(path.read_text(encoding="utf-8"))
         # Full-key check: the filename carries only a prefix; a (vanishingly
         # unlikely) prefix collision or a stale/corrupt entry must miss, not lie.
         if entry.get("key") != key or entry.get("kind") != kind:
@@ -155,11 +251,10 @@ def lookup(kind: str, pins: dict[str, Any]) -> Optional[dict[str, Any]]:
 
 
 def store(kind: str, pins: dict[str, Any], value: dict[str, Any]) -> bool:
-    """Persist one entry (atomic replace); True on success. Never raises."""
+    """Persist one entry; True on success. Never raises."""
     if not enabled():
         return False
     key = cache_key(kind, pins)
-    path = _entry_path(kind, key)
     entry = {
         "cache_schema": CACHE_SCHEMA_VERSION,
         "kind": kind,
@@ -169,11 +264,4 @@ def store(kind: str, pins: dict[str, Any], value: dict[str, Any]) -> bool:
         # Store the value WITHOUT any hit annotation a caller may have added.
         "value": {k: v for k, v in value.items() if k != CACHE_META_KEY},
     }
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(entry, default=str), encoding="utf-8")
-        os.replace(tmp, path)
-        return True
-    except Exception:
-        return False
+    return _save_entry(kind, key, entry)

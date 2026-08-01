@@ -19,6 +19,7 @@ import pytest
 from crewml import config, llm
 from crewml.config import RESULTS_DIR
 from crewml.datasets import (
+    BENCHMARK_KEYS,
     REGISTRY,
     TARGET_COLUMN,
     holdout_path,
@@ -29,7 +30,7 @@ from crewml.datasets import (
 from crewml.solo_agent import build_profile_summary, mock_solo_script
 
 SOLO_METRICS_PATH = RESULTS_DIR / "solo_agent_metrics.json"
-KEYS = sorted(REGISTRY)
+KEYS = list(BENCHMARK_KEYS)  # benchmark-scoped, immune to restored uploads
 
 
 # --- llm plumbing (unit, network-free) --------------------------------------
@@ -128,7 +129,7 @@ def test_solo_every_dataset_accounted_for():
     """
     report = _load_solo()
     accounted = set(report["datasets"]) | set(report["failures"])
-    assert accounted == set(REGISTRY)
+    assert accounted == set(BENCHMARK_KEYS)
     for entry in report["datasets"].values():
         # A failed script is recorded with ok=False (no score); only the ones the
         # agent actually solved carry a finite value.

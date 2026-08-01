@@ -1,0 +1,93 @@
+# CrewML stack — Day 27: api + redis, plus the dashboard as a plain API client.
+#
+#   docker compose up --build          # full stack on :8000 (API) / :8501 (UI)
+#   CREWML_LLM_PROVIDER=mock docker compose up   # offline: no key leaves host
+#
+# Compose interpolates ${GROQ_API_KEY} from the shell or a local .env — the
+# key reaches the container as runtime environment only; the image never
+# contains it (.dockerignore excludes .env from the build context).
+services:
+  redis:
+    image: redis:7-alpine
+    # Shared node-cache backend (crewml/cache.py, CREWML_REDIS_URL). Entries
+    # are content-addressed and never expire by time; bound memory instead and
+    # let LRU evict cold keys.
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build: .
+    image: crewml:latest
+    ports:
+      - "8000:8000"
+    # The memory jail moves from rlimit to cgroup in a container: RLIMIT_AS
+    # caps *virtual* space, and on Linux the OpenMP runtimes' thread stacks +
+    # malloc arenas exhaust a 3 GiB AS before touching real memory (pthread
+    # EAGAIN -> std::system_error, found on Day 27). mem_limit caps the whole
+    # tree's *physical* memory — including worker grandchildren the Day-19
+    # Windows watchdog documented it could not see — so the executor's own
+    # cap is off inside the container and the cgroup is the enforcement.
+    mem_limit: 4g
+    # Parallelism must be bounded EXPLICITLY in a container. The crew's
+    # joblib/loky layers size themselves off the VM's CPU count (16 here), so
+    # unbounded they spawn 16 workers × 4 OMP threads inside this cgroup —
+    # measured loadavg 37 on Day 27, starving the sandbox children into their
+    # 120 s timeouts. Four CPUs, four loky workers, modest inner threads.
+    cpus: 4
+    environment:
+      CREWML_REDIS_URL: redis://redis:6379/0
+      CREWML_EXECUTOR_MEM_MB: "0"
+      LOKY_MAX_CPU_COUNT: "4"
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      CREWML_LLM_PROVIDER: ${CREWML_LLM_PROVIDER:-groq}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      CREWML_SEED: ${CREWML_SEED:-42}
+    volumes:
+      # data/ carries the SHA-256-sealed train/holdout splits — a host bind
+      # mount (small one-shot parquet reads; host keeps the canonical copy).
+      - ./data:/app/data
+      # artifacts/ (run store + executor workdirs + cache) is a NAMED volume:
+      # it must outlive rebuilds, and it holds things a host bind mount on
+      # Docker Desktop handles badly — SQLite under the file-sharing bridge
+      # (locking semantics) and the executor's joblib memmap churn (every
+      # sandbox call). Run history is served by the API, not the host FS.
+      - artifacts-data:/app/artifacts
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # stdlib-only: the slim image has no curl, and urlopen raises on non-2xx.
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  dashboard:
+    # Same image the api service builds and tags — declaring a second `build`
+    # here would make compose build the identical context twice in parallel
+    # (double the ~1.5 GB wheel download for byte-identical layers).
+    image: crewml:latest
+    command: streamlit run crewml/dashboard/app.py
+      --server.port 8501 --server.address 0.0.0.0 --server.headless true
+    ports:
+      - "8501:8501"
+    environment:
+      CREWML_API_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  redis-data:
+  artifacts-data:

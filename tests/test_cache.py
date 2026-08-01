@@ -207,3 +207,81 @@ def test_warm_profile_builds_identical_plan(cache_env):
     cold_profile = nodes.profiler({"dataset_key": "credit-g"})["profile"]
     warm_profile = nodes.profiler({"dataset_key": "credit-g"})["profile"]
     assert build_plan(cold_profile) == build_plan(warm_profile)
+
+
+# --- Day 27: Redis backend — same schema, same honesty, fail-open twice ------
+
+class _FakeRedis:
+    """The two methods the backend uses, over a plain dict. decode_responses=True."""
+
+    def __init__(self):
+        self.data: dict[str, str] = {}
+
+    def get(self, key):
+        return self.data.get(key)
+
+    def set(self, key, value):
+        self.data[key] = value
+
+
+class _DeadRedis:
+    def get(self, key):  # pragma: no cover - trivial
+        raise ConnectionError("redis down")
+
+    def set(self, key, value):
+        raise ConnectionError("redis down")
+
+
+@pytest.fixture()
+def redis_reset(monkeypatch):
+    """Fresh client memo per test — a prior test's dead-memo must not leak."""
+    monkeypatch.setattr(cache, "_redis", None)
+
+
+def test_unconfigured_redis_uses_file_backend(cache_env, redis_reset, monkeypatch):
+    monkeypatch.delenv("CREWML_REDIS_URL", raising=False)
+    assert cache._redis_client() is None
+    assert cache.store("profile", {"p": 1}, {"v": 1})
+    assert list(cache_env.glob("profile-*.json"))  # entry landed on disk
+
+
+def test_redis_roundtrip_annotates_hits_and_skips_files(cache_env, redis_reset,
+                                                        monkeypatch):
+    fake = _FakeRedis()
+    monkeypatch.setattr(cache, "_redis_client", lambda: fake)
+    pins = {"train_sha256": "abc", "seed": 42}
+    assert cache.store("profile", pins, {"n_rows": 10, cache.CACHE_META_KEY: {"hit": True}})
+    assert not list(cache_env.glob("profile-*.json"))  # redis replaced files
+    [(key, raw)] = fake.data.items()
+    assert key == cache._redis_key("profile", cache.cache_key("profile", pins))
+    assert cache.CACHE_META_KEY not in json.loads(raw)["value"]  # annotation stripped
+    hit = cache.lookup("profile", pins)
+    assert hit["n_rows"] == 10
+    assert hit[cache.CACHE_META_KEY]["hit"] is True
+
+
+def test_redis_full_key_check_still_applies(cache_env, redis_reset, monkeypatch):
+    fake = _FakeRedis()
+    monkeypatch.setattr(cache, "_redis_client", lambda: fake)
+    pins = {"p": 1}
+    key = cache.cache_key("profile", pins)
+    fake.data[cache._redis_key("profile", key)] = json.dumps(
+        {"kind": "profile", "key": "not-the-key", "value": {"v": 1}})
+    assert cache.lookup("profile", pins) is None  # corrupt entry misses, never lies
+
+
+def test_dead_redis_falls_open_to_file_backend(cache_env, redis_reset, monkeypatch):
+    monkeypatch.setenv("CREWML_REDIS_URL", "redis://localhost:1")  # configured...
+    monkeypatch.setattr(cache, "_redis", _DeadRedis())  # ...but the server died
+    assert cache.store("profile", {"p": 2}, {"v": 2})  # True: file took it
+    assert list(cache_env.glob("profile-*.json"))
+    assert cache._redis is cache._REDIS_DEAD  # memoised: no repeat timeouts
+    assert cache.lookup("profile", {"p": 2})["v"] == 2  # served from disk
+
+
+def test_unreachable_redis_url_memoises_dead(cache_env, redis_reset, monkeypatch):
+    # A configured-but-unconnectable URL: first call pays the 1s ping, then None.
+    monkeypatch.setenv("CREWML_REDIS_URL", "redis://127.0.0.1:1/0")
+    assert cache._redis_client() is None
+    assert cache._redis is cache._REDIS_DEAD
+    assert cache.store("profile", {"p": 3}, {"v": 3})  # file backend still works

@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 
 from crewml.datasets import (
+    BENCHMARK_KEYS,
     REGISTRY,
     TARGET_COLUMN,
     holdout_path,
@@ -19,7 +20,7 @@ from crewml.datasets import (
     verify_holdout_untouched,
 )
 
-KEYS = sorted(REGISTRY)
+KEYS = list(BENCHMARK_KEYS)  # benchmark-scoped, immune to restored uploads
 
 
 def _require_prepared(key: str) -> None:
@@ -28,14 +29,14 @@ def _require_prepared(key: str) -> None:
 
 
 def test_registry_has_expected_mix():
-    subtypes = sorted(s.subtype for s in REGISTRY.values())
+    subtypes = sorted(REGISTRY[k].subtype for k in BENCHMARK_KEYS)
     assert subtypes == ["binary", "binary", "multiclass", "regression", "regression"]
 
 
 def test_manifest_present_and_complete():
     manifest = load_manifest()
     assert manifest["seed"] == 42
-    assert set(manifest["datasets"]) == set(REGISTRY)
+    assert set(manifest["datasets"]) == set(BENCHMARK_KEYS)
     assert manifest["failures"] == {}
 
 
