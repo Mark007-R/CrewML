@@ -62,6 +62,10 @@ DEFAULT_ALLOWED_IMPORTS: frozenset[str] = frozenset(
         # transitive top-levels of the above
         "PIL", "cycler", "kiwisolver", "pyparsing", "dateutil", "pytz",
         "tzdata", "packaging", "six", "fontTools", "pyarrow",
+        # sklearn >= 1.9 imports the narwhals dataframe-compat shim inside
+        # sklearn.utils.validation — pure adapter code, no IO at import.
+        # Found on Day 27: the container's fresher sklearn hit the guard.
+        "narwhals",
         # legacy import shims some wheels still touch at runtime
         "setuptools", "pkg_resources",
     }

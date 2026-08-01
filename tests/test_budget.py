@@ -60,7 +60,8 @@ def test_charges_accumulate_with_per_agent_breakdown():
     assert b.tokens_remaining == 8400
     snap = b.snapshot()
     assert snap["n_calls"] == 3
-    assert snap["per_agent"]["critic"] == {"calls": 2, "tokens": 1200, "refused": 0}
+    assert snap["per_agent"]["critic"] == {"calls": 2, "tokens": 1200, "refused": 0,
+                                           "llm_time_s": 0.0}
     assert snap["per_agent"]["profiler"]["tokens"] == 400
     assert snap["exhausted"] is False and snap["stop_reason"] is None
 

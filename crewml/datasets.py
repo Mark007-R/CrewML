@@ -69,6 +69,12 @@ REGISTRY: dict[str, DatasetSpec] = {
     ),
 }
 
+# The five locked benchmark datasets, captured before any runtime registration.
+# Day-26 upload restoration mutates REGISTRY in place (by design — /run looks
+# every dataset up there), so benchmark-scoped code must enumerate THIS tuple,
+# not the live registry, or a restored upload silently widens "the suite".
+BENCHMARK_KEYS: tuple[str, ...] = tuple(sorted(REGISTRY))
+
 
 def dataset_dir(key: str) -> Path:
     return DATA_DIR / key
@@ -110,10 +116,17 @@ def verify_holdout_untouched(key: str) -> bool:
     """Return True iff the on-disk holdout still matches its manifest fingerprint.
 
     This is the honesty proof: if the crew (or anyone) altered the held-out set,
-    the SHA-256 will diverge and this returns False.
+    the SHA-256 will diverge and this returns False. Benchmark datasets are
+    checked against the committed Day-1 manifest; uploaded datasets (Day 26)
+    against the per-upload manifest sealed at ingestion. Lazy import because
+    :mod:`crewml.uploads` imports this module.
     """
-    manifest = load_manifest()
-    recorded = manifest["datasets"][key]["holdout_sha256"]
+    if key.startswith("upload-"):
+        from crewml.uploads import load_upload_manifest
+
+        recorded = load_upload_manifest(key)["holdout_sha256"]
+    else:
+        recorded = load_manifest()["datasets"][key]["holdout_sha256"]
     current = sha256_of_frame(load_holdout(key))
     return recorded == current
 

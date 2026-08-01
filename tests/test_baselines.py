@@ -15,11 +15,13 @@ import pytest
 
 from crewml.baselines import BASELINE_SYSTEMS, build_preprocessor, split_xy
 from crewml.config import RESULTS_DIR
-from crewml.datasets import REGISTRY, TARGET_COLUMN, holdout_path, load_train, train_path
+from crewml.datasets import (
+    BENCHMARK_KEYS, REGISTRY, TARGET_COLUMN, holdout_path, load_train, train_path,
+)
 from crewml.scoring import score_predictions
 
 BASELINE_METRICS_PATH = RESULTS_DIR / "baseline_metrics.json"
-KEYS = sorted(REGISTRY)
+KEYS = list(BENCHMARK_KEYS)  # benchmark-scoped, immune to restored uploads
 
 
 # --- scoring semantics (unit, dataset-free) ---------------------------------
@@ -101,7 +103,7 @@ def _load_baselines() -> dict:
 def test_baseline_metrics_complete():
     report = _load_baselines()
     assert report["failures"] == {}
-    assert set(report["datasets"]) == set(REGISTRY)
+    assert set(report["datasets"]) == set(BENCHMARK_KEYS)
     assert list(report["systems"]) == list(BASELINE_SYSTEMS)
 
 
@@ -116,6 +118,7 @@ def test_default_rf_beats_dummy(key):
 def test_dummy_binary_auc_is_half():
     """A feature-blind classifier can only achieve chance AUC."""
     report = _load_baselines()
-    for key, spec in REGISTRY.items():
+    for key in BENCHMARK_KEYS:
+        spec = REGISTRY[key]
         if spec.subtype == "binary":
             assert report["datasets"][key]["dummy"]["value"] == pytest.approx(0.5, abs=1e-6)

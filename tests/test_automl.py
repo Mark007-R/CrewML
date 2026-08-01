@@ -16,13 +16,15 @@ import pytest
 
 from crewml.automl_baseline import AUTOML_SYSTEM, FLAML_METRIC
 from crewml.config import RESULTS_DIR
-from crewml.datasets import REGISTRY
+from crewml.datasets import BENCHMARK_KEYS, REGISTRY
 from crewml.leaderboard import SYSTEMS, assemble_table, render_markdown
 
 AUTOML_METRICS_PATH = RESULTS_DIR / "automl_metrics.json"
 BASELINE_METRICS_PATH = RESULTS_DIR / "baseline_metrics.json"
 TABLE_JSON_PATH = RESULTS_DIR / "baselines_table.json"
-KEYS = sorted(REGISTRY)
+# Benchmark-scoped: a Day-26 upload restored into REGISTRY at import (via
+# crewml.api.app) must not widen what "complete over the suite" means.
+KEYS = list(BENCHMARK_KEYS)
 
 
 # --- metric mapping (unit) --------------------------------------------------
@@ -97,7 +99,7 @@ def test_automl_metrics_complete():
     report = _load_automl()
     assert report["system"] == AUTOML_SYSTEM
     assert report["failures"] == {}
-    assert set(report["datasets"]) == set(REGISTRY)
+    assert set(report["datasets"]) == set(BENCHMARK_KEYS)
 
 
 @pytest.mark.parametrize("key", KEYS)
@@ -127,7 +129,7 @@ def test_baselines_table_matches_source_metrics():
         pytest.skip("baselines_table.json missing — run build_baselines_table.py")
     table = json.loads(TABLE_JSON_PATH.read_text())
     automl = _load_automl()
-    assert set(table["rows"]) == set(REGISTRY)
-    for key in REGISTRY:
+    assert set(table["rows"]) == set(BENCHMARK_KEYS)
+    for key in BENCHMARK_KEYS:
         board = table["rows"][key]["systems"]["automl_flaml"]["value"]
         assert board == pytest.approx(automl["datasets"][key]["value"])

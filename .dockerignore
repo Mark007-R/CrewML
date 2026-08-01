@@ -1,0 +1,46 @@
+# Secrets — the image must NEVER contain a key; compose passes env at runtime.
+.env
+.env.*
+!.env.example
+
+# Local-only day files and scheduled-task skills.
+crewml-builder_SKILL.md
+crewml-post_SKILL.md
+POSTS_LOG.md
+PROGRESS_LOG.md
+reports/
+explainers/
+docs/
+
+# Data and artifacts are volumes, not image layers (seals + runs must
+# survive rebuilds; data/ alone is hundreds of MB of context otherwise).
+data/
+artifacts/
+models/
+mlruns/
+*.parquet
+*.pkl
+*.joblib
+
+# VCS / caches / envs.
+.git/
+.gitignore
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Tests ship in the repo, not the runtime image (Day 28 runs them in CI/host).
+tests/
+
+# OS / editor.
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

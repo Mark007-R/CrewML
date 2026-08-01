@@ -86,24 +86,32 @@ class RunBudget:
         self._completion_tokens = 0
         self._n_calls = 0
         self._n_refused = 0
-        self._per_agent: dict[str, dict[str, int]] = {}
+        self._llm_time_s = 0.0
+        self._per_agent: dict[str, dict[str, Any]] = {}
 
     # --- Accounting -----------------------------------------------------------
 
-    def _agent_row(self, agent: str) -> dict[str, int]:
-        return self._per_agent.setdefault(agent, {"calls": 0, "tokens": 0, "refused": 0})
+    def _agent_row(self, agent: str) -> dict[str, Any]:
+        return self._per_agent.setdefault(
+            agent, {"calls": 0, "tokens": 0, "refused": 0, "llm_time_s": 0.0}
+        )
 
-    def charge(self, *, agent: str, prompt_tokens: int, completion_tokens: int) -> None:
+    def charge(self, *, agent: str, prompt_tokens: int, completion_tokens: int,
+               latency_s: float = 0.0) -> None:
         """Record one completed LLM call. Always succeeds — a granted call is
         charged in full even if it pushes the ledger past its cap (the gate is
-        pre-call; see the module docstring on overshoot)."""
+        pre-call; see the module docstring on overshoot). ``latency_s`` is the
+        provider round-trip (Day 25 telemetry) — recorded, never enforced; the
+        wall-clock cap remains the run-level ``time_budget_s``."""
         with self._lock:
             self._prompt_tokens += int(prompt_tokens)
             self._completion_tokens += int(completion_tokens)
             self._n_calls += 1
+            self._llm_time_s += float(latency_s)
             row = self._agent_row(agent)
             row["calls"] += 1
             row["tokens"] += int(prompt_tokens) + int(completion_tokens)
+            row["llm_time_s"] = round(row["llm_time_s"] + float(latency_s), 3)
 
     def enforce(self, *, agent: str) -> None:
         """Pre-call gate: raise :class:`BudgetExhaustedError` if a cap is spent.
@@ -169,6 +177,7 @@ class RunBudget:
             per_agent = {k: dict(v) for k, v in self._per_agent.items()}
             n_calls, n_refused = self._n_calls, self._n_refused
             prompt, completion = self._prompt_tokens, self._completion_tokens
+            llm_time_s = self._llm_time_s
         return {
             "token_budget": self.token_budget,
             "time_budget_s": self.time_budget_s,
@@ -181,6 +190,7 @@ class RunBudget:
                                  if self.time_remaining_s is not None else None),
             "n_calls": n_calls,
             "n_refused": n_refused,
+            "llm_time_s": round(llm_time_s, 3),
             "per_agent": per_agent,
             "tokens_exhausted": self.tokens_exhausted,
             "time_exhausted": self.time_exhausted,
