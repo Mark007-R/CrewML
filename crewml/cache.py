@@ -197,9 +197,18 @@ def _load_entry(kind: str, key: str) -> Optional[dict[str, Any]]:
     if client is not None:
         try:
             raw = client.get(_redis_key(kind, key))
-            return json.loads(raw) if raw else None
         except Exception:
-            _mark_redis_dead()  # fall through: file backend is never worse
+            _mark_redis_dead()  # SERVER failure -> file backend is never worse
+        else:
+            if not raw:
+                return None  # authoritative miss; file is not a second chance
+            try:
+                return json.loads(raw)
+            except Exception:
+                # Corrupt ENTRY, live server: a per-key miss, exactly like a
+                # corrupt file — conflating it with a dead server would let one
+                # poisoned value disable the shared cache for the whole process.
+                return None
     try:
         return json.loads(_entry_path(kind, key).read_text(encoding="utf-8"))
     except Exception:

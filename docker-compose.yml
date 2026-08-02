@@ -1,7 +1,10 @@
 # CrewML stack — Day 27: api + redis, plus the dashboard as a plain API client.
 #
 #   docker compose up --build          # full stack on :8000 (API) / :8501 (UI)
-#   CREWML_LLM_PROVIDER=mock docker compose up   # offline: no key leaves host
+#   CREWML_LLM_PROVIDER=mock docker compose up   # offline: zero LLM calls
+#   (mock mode stops all provider traffic, but ${GROQ_API_KEY} interpolation
+#   still passes any key present in the shell/.env into the container env —
+#   also unset GROQ_API_KEY to keep the key out of the containers entirely)
 #
 # Compose interpolates ${GROQ_API_KEY} from the shell or a local .env — the
 # key reaches the container as runtime environment only; the image never
