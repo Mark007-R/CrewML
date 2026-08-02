@@ -6,8 +6,11 @@
 # different bytes and flip holdout_untouched to False (verified empirically:
 # 2.1.4 reproduces the sealed hashes bit-for-bit, 2.3.3 and 3.0.5 do not).
 # sklearn is bounded for image parity too (1.9 pulls narwhals into
-# sklearn.utils.validation). File-byte seals that free these pins are a
-# Phase 6 candidate.
+# sklearn.utils.validation). Seal VERIFICATION no longer needs this pin —
+# byte seals (train/holdout_file_sha256, added in the Day-27 fix PR) verify
+# in any environment — but the pin stays so containerised runs reproduce the
+# host's model scores/fingerprints; relax it only with a cross-version repro
+# study (Phase 6 candidate).
 scikit-learn>=1.4,<1.9
 pandas==2.1.4
 numpy>=1.26,<2.0

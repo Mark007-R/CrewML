@@ -251,3 +251,28 @@ def test_crew_state_for_upload_carries_no_paths(sandbox):
     blob = json.dumps(state, default=str).lower()
     assert "holdout" not in blob and "parquet" not in blob
     assert state["dataset_key"] == man["key"]
+
+
+# --- Day 27 fix: byte seals on upload manifests ------------------------------
+
+def test_ingest_writes_byte_seals(sandbox):
+    from crewml.datasets import sha256_of_file
+
+    man = ingest_csv(_csv(_binary_frame()), target_column="churned",
+                     filename="churn.csv")
+    key = man["key"]
+    assert man["train_file_sha256"] == sha256_of_file(sandbox / key / "train.parquet")
+    assert man["holdout_file_sha256"] == sha256_of_file(sandbox / key / "holdout.parquet")
+    # verification for the fresh upload goes through the byte path
+    from crewml import datasets
+    assert datasets.verify_holdout_untouched(key) is True
+
+
+def test_upload_seals_flow_into_run_manifest(sandbox):
+    from crewml.manifest import dataset_seals
+
+    man = ingest_csv(_csv(_binary_frame()), target_column="churned",
+                     filename="churn.csv")
+    seals = dataset_seals(man["key"])
+    assert seals["holdout_file_sha256"] == man["holdout_file_sha256"]
+    assert seals["sealed_at_ingestion"] is True

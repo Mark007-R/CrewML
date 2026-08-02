@@ -26,7 +26,9 @@
         "positive_class": "bad"
       },
       "train_sha256": "9145136aab2ec4407b5bb8992e26c9b84b14d7133e560bd50c709a8b5ac15dd9",
-      "holdout_sha256": "7dd5294940d45fea99ef5cda63f4c3246869cd77b074ed7329d251e07b66e72d"
+      "holdout_sha256": "7dd5294940d45fea99ef5cda63f4c3246869cd77b074ed7329d251e07b66e72d",
+      "train_file_sha256": "9145136aab2ec4407b5bb8992e26c9b84b14d7133e560bd50c709a8b5ac15dd9",
+      "holdout_file_sha256": "7dd5294940d45fea99ef5cda63f4c3246869cd77b074ed7329d251e07b66e72d"
     },
     "diabetes": {
       "key": "diabetes",
@@ -50,7 +52,9 @@
         "positive_class": "tested_positive"
       },
       "train_sha256": "eda652d11a06f6f4d50fac4c6199b89c222c41469ced360e6a2fb8dc6f5daf14",
-      "holdout_sha256": "a3888f5ce8a00491f532af28030e4f9c8a86f1cc0a9f9ad0449af770c462313b"
+      "holdout_sha256": "a3888f5ce8a00491f532af28030e4f9c8a86f1cc0a9f9ad0449af770c462313b",
+      "train_file_sha256": "eda652d11a06f6f4d50fac4c6199b89c222c41469ced360e6a2fb8dc6f5daf14",
+      "holdout_file_sha256": "a3888f5ce8a00491f532af28030e4f9c8a86f1cc0a9f9ad0449af770c462313b"
     },
     "vehicle": {
       "key": "vehicle",
@@ -76,7 +80,9 @@
         "positive_class": null
       },
       "train_sha256": "78a854d334528ee8c61aafc5b3d307793ca098ab20c6bf50c161cbb3db20b1aa",
-      "holdout_sha256": "d9a02cc98c245a1318f81170c5b538f342654a2d14d45186ff14db94ca1e5ee3"
+      "holdout_sha256": "d9a02cc98c245a1318f81170c5b538f342654a2d14d45186ff14db94ca1e5ee3",
+      "train_file_sha256": "78a854d334528ee8c61aafc5b3d307793ca098ab20c6bf50c161cbb3db20b1aa",
+      "holdout_file_sha256": "d9a02cc98c245a1318f81170c5b538f342654a2d14d45186ff14db94ca1e5ee3"
     },
     "cpu_small": {
       "key": "cpu_small",
@@ -97,7 +103,9 @@
         "target_mean": 83.9688720703125
       },
       "train_sha256": "7ea053a8fd761f5e53e8f088ccdc9f70d4a4188262149d04ca997ba88aeddc82",
-      "holdout_sha256": "fa5e59defd9b6c623bc9975193622d5c0bd624f5d0b2a4dd7969016c7e53df3c"
+      "holdout_sha256": "fa5e59defd9b6c623bc9975193622d5c0bd624f5d0b2a4dd7969016c7e53df3c",
+      "train_file_sha256": "7ea053a8fd761f5e53e8f088ccdc9f70d4a4188262149d04ca997ba88aeddc82",
+      "holdout_file_sha256": "fa5e59defd9b6c623bc9975193622d5c0bd624f5d0b2a4dd7969016c7e53df3c"
     },
     "kin8nm": {
       "key": "kin8nm",
@@ -118,7 +126,9 @@
         "target_mean": 0.714283492357422
       },
       "train_sha256": "dcb90fa953dd01142a3add79fc234a639cb28cd7141b8ee5b34b5c6a7f0bdb28",
-      "holdout_sha256": "0ce71d0626df6aada6a576961f321be8467ca29d2a793d0739109e1fd8f61c62"
+      "holdout_sha256": "0ce71d0626df6aada6a576961f321be8467ca29d2a793d0739109e1fd8f61c62",
+      "train_file_sha256": "dcb90fa953dd01142a3add79fc234a639cb28cd7141b8ee5b34b5c6a7f0bdb28",
+      "holdout_file_sha256": "0ce71d0626df6aada6a576961f321be8467ca29d2a793d0739109e1fd8f61c62"
     }
   },
   "failures": {}

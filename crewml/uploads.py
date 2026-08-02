@@ -50,6 +50,7 @@ from crewml.datasets import (
     REGISTRY,
     dataset_dir,
     holdout_path,
+    sha256_of_file,
     sha256_of_frame,
     spec_asdict,
     train_path,
@@ -304,6 +305,11 @@ def ingest_csv(csv_bytes: bytes, *, target_column: str,
         "n_features": int(frame.shape[1] - 1),
         "train_sha256": sha256_of_frame(train_df),
         "holdout_sha256": sha256_of_frame(holdout_df),
+        # Byte seals over the just-written files (Day 27): verifiable in any
+        # environment, unlike the frame seals above (pandas/pyarrow-version
+        # sensitive), which are kept for continuity with pre-Day-27 manifests.
+        "train_file_sha256": sha256_of_file(train_path(key)),
+        "holdout_file_sha256": sha256_of_file(holdout_path(key)),
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
     upload_manifest_path(key).write_text(
@@ -319,6 +325,18 @@ def register_upload(manifest: dict[str, Any]) -> DatasetSpec:
     spec = DatasetSpec(**manifest["spec"])
     REGISTRY[spec.key] = spec
     return spec
+
+
+def discover_upload_manifests() -> list[Path]:
+    """Paths of every sealed upload manifest on disk (sorted; may be empty)."""
+    if not DATA_DIR.exists():
+        return []
+    return sorted(
+        entry / UPLOAD_MANIFEST_NAME
+        for entry in DATA_DIR.iterdir()
+        if entry.is_dir() and is_upload_key(entry.name)
+        and (entry / UPLOAD_MANIFEST_NAME).exists()
+    )
 
 
 def restore_uploaded_datasets() -> list[str]:
