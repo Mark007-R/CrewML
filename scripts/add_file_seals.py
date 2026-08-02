@@ -9,9 +9,11 @@ benchmark manifest and any per-upload manifests — to ALSO carry
 which any environment can verify.
 
 Chain of custody: a byte seal is only recorded after the existing FRAME seal
-re-verifies right here, in the sealing environment — so the new seal provably
+re-verifies right here, in the sealing environment — so the new seal
 fingerprints the same untouched data the Day-1 seal did, not a later state.
-The frame seals are kept untouched (they remain the original commitment).
+(The verify and the byte-hash are two reads in one process run, not one
+atomic operation — run this with nothing else touching data/.) The frame
+seals are kept untouched (they remain the original commitment).
 
 Idempotent: datasets already carrying byte seals are re-verified against
 them and skipped. Any mismatch aborts loudly — never reseal over a failure.
@@ -49,7 +51,7 @@ def _upgrade(entry: dict, key: str) -> str:
                 f"({recorded[:12]}… != {current[:12]}…) — refusing to add a "
                 "byte seal on top of an unverified split. Investigate first."
             )
-    action = "added"
+    added = 0
     for split in ("train", "holdout"):
         field = f"{split}_file_sha256"
         digest = sha256_of_file(paths[split])
@@ -59,10 +61,12 @@ def _upgrade(entry: dict, key: str) -> str:
                     f"ABORT: {key} {split} BYTE seal mismatch — file changed "
                     "since byte-sealing. Investigate first."
                 )
-            action = "verified (already sealed)"
         else:
             entry[field] = digest
-    return action
+            added += 1
+    if added == 2:
+        return "added"
+    return "verified (already sealed)" if added == 0 else f"added {added} missing seal(s)"
 
 
 def main() -> None:

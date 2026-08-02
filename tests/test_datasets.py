@@ -133,8 +133,10 @@ def test_legacy_manifest_falls_back_to_frame_seal(monkeypatch):
 
 
 def test_byte_seal_detects_rewritten_file(tmp_path, monkeypatch):
-    """Even a byte-identical-CONTENT rewrite is flagged: byte seals pin the
-    exact artifact, strictly stricter than the frame seal they extend."""
+    """A tampered holdout file (row appended, re-serialised) flips the byte
+    seal. (Byte seals are also strictly stricter than frame seals — a
+    lossless re-encode would flip them too — but that property is by
+    construction of hashing raw bytes, not separately exercised here.)"""
     import shutil
 
     from crewml import datasets

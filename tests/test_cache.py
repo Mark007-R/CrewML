@@ -25,11 +25,18 @@ from crewml.manifest import canonical_result
 
 @pytest.fixture()
 def cache_env(tmp_path, monkeypatch):
-    """A private cache dir, cache on, LLM narratives off (deterministic core)."""
+    """A private cache dir, cache on, LLM narratives off (deterministic core).
+
+    Also forces the FILE backend: a developer shell exporting
+    CREWML_REDIS_URL (e.g. at the compose stack) must not leak a live Redis —
+    and its client memo — into tests that assert on cache files.
+    """
     monkeypatch.setenv("CREWML_NODE_CACHE_DIR", str(tmp_path))
     monkeypatch.setenv("CREWML_NODE_CACHE", "1")
     monkeypatch.setenv("CREWML_PROFILER_LLM", "0")
     monkeypatch.setenv("CREWML_PLANNER_LLM", "0")
+    monkeypatch.delenv("CREWML_REDIS_URL", raising=False)
+    monkeypatch.setattr(cache, "_redis", None)
     return tmp_path
 
 
@@ -285,3 +292,23 @@ def test_unreachable_redis_url_memoises_dead(cache_env, redis_reset, monkeypatch
     assert cache._redis_client() is None
     assert cache._redis is cache._REDIS_DEAD
     assert cache.store("profile", {"p": 3}, {"v": 3})  # file backend still works
+
+
+def test_corrupt_redis_entry_is_a_miss_not_a_dead_server(cache_env, redis_reset,
+                                                         monkeypatch):
+    """One poisoned value must cost one key, not the whole shared cache.
+
+    Audit finding (Day 27): decode failure was conflated with server failure
+    and memoised _REDIS_DEAD — a single corrupt entry permanently downgraded
+    the process to file caching. Corrupt ENTRY => per-key miss, server LIVE.
+    """
+    fake = _FakeRedis()
+    monkeypatch.setattr(cache, "_redis_client", lambda: fake)
+    good_pins, bad_pins = {"p": "good"}, {"p": "bad"}
+    assert cache.store("profile", good_pins, {"v": 1})
+    fake.data[cache._redis_key("profile", cache.cache_key("profile", bad_pins))] = \
+        "{not json"
+    assert cache.lookup("profile", bad_pins) is None      # corrupt -> miss
+    assert cache._redis is not cache._REDIS_DEAD          # server NOT declared dead
+    assert cache.lookup("profile", good_pins)["v"] == 1   # still served from redis
+    assert not list(cache_env.glob("profile-*.json"))     # and never from files
