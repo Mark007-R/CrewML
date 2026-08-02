@@ -86,3 +86,68 @@ def test_tampering_is_detected():
     # Now a real mutation must diverge.
     tampered = pd.concat([tampered, tampered.iloc[[0]]], ignore_index=True)
     assert sha256_of_frame(tampered) != recorded
+
+
+# --- Day 27 fix: byte seals — environment-independent verification ----------
+
+def test_manifest_carries_byte_seals():
+    """Every benchmark entry has file seals (scripts/add_file_seals.py ran)."""
+    manifest = load_manifest()
+    for key in BENCHMARK_KEYS:
+        entry = manifest["datasets"][key]
+        assert len(entry["train_file_sha256"]) == 64
+        assert len(entry["holdout_file_sha256"]) == 64
+
+
+def test_byte_seal_matches_on_disk_file():
+    from crewml.datasets import holdout_path, sha256_of_file
+
+    manifest = load_manifest()
+    for key in BENCHMARK_KEYS:
+        recorded = manifest["datasets"][key]["holdout_file_sha256"]
+        assert sha256_of_file(holdout_path(key)) == recorded
+
+
+def test_verification_prefers_byte_seal(monkeypatch):
+    """With a byte seal present, verification never re-serialises the frame —
+    the whole point: no pandas/pyarrow version can flip the verdict."""
+    from crewml import datasets
+
+    def boom(df):  # noqa: ARG001
+        raise AssertionError("frame seal path used despite byte seal present")
+
+    monkeypatch.setattr(datasets, "sha256_of_frame", boom)
+    assert datasets.verify_holdout_untouched("credit-g") is True
+
+
+def test_legacy_manifest_falls_back_to_frame_seal(monkeypatch):
+    """Entries without file seals (pre-Day-27) still verify via frame hash."""
+    from crewml import datasets
+
+    manifest = datasets.load_manifest()
+    entry = dict(manifest["datasets"]["credit-g"])
+    entry.pop("train_file_sha256"), entry.pop("holdout_file_sha256")
+    legacy = {**manifest, "datasets": {**manifest["datasets"], "credit-g": entry}}
+    monkeypatch.setattr(datasets, "load_manifest", lambda: legacy)
+    assert datasets.verify_holdout_untouched("credit-g") is True
+
+
+def test_byte_seal_detects_rewritten_file(tmp_path, monkeypatch):
+    """Even a byte-identical-CONTENT rewrite is flagged: byte seals pin the
+    exact artifact, strictly stricter than the frame seal they extend."""
+    import shutil
+
+    from crewml import datasets
+
+    key = "credit-g"
+    fake_dir = tmp_path / key
+    fake_dir.mkdir()
+    shutil.copy(datasets.train_path(key), fake_dir / "train.parquet")
+    # Re-serialise the same rows through pandas: same frame, different bytes
+    # (metadata/ordering) — or identical bytes in the sealing env; either way
+    # appending a row must flip the byte seal.
+    df = load_holdout(key)
+    tampered = pd.concat([df, df.iloc[[0]]], ignore_index=True)
+    tampered.to_parquet(fake_dir / "holdout.parquet", index=False)
+    monkeypatch.setattr(datasets, "DATA_DIR", tmp_path)
+    assert datasets.verify_holdout_untouched(key) is False

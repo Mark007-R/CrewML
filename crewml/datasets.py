@@ -94,6 +94,22 @@ def sha256_of_frame(df: pd.DataFrame) -> str:
     return hashlib.sha256(buf).hexdigest()
 
 
+def sha256_of_file(path: Path) -> str:
+    """SHA-256 of a file's raw bytes — environment-independent (Day 27 fix).
+
+    Frame seals re-serialise through pandas/pyarrow, so the same untouched
+    file hashes differently across their versions (pandas 2.3/3.0 vs 2.1) —
+    which is why the image pins pandas. Byte seals depend on nothing but the
+    bytes: any environment can verify them, and they are strictly stricter
+    (even a semantically-lossless re-encode of the parquet flips them).
+    """
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def load_train(key: str) -> pd.DataFrame:
     """Load the training split — the ONLY split the crew is allowed to touch."""
     return pd.read_parquet(train_path(key))
@@ -124,11 +140,17 @@ def verify_holdout_untouched(key: str) -> bool:
     if key.startswith("upload-"):
         from crewml.uploads import load_upload_manifest
 
-        recorded = load_upload_manifest(key)["holdout_sha256"]
+        entry = load_upload_manifest(key)
     else:
-        recorded = load_manifest()["datasets"][key]["holdout_sha256"]
-    current = sha256_of_frame(load_holdout(key))
-    return recorded == current
+        entry = load_manifest()["datasets"][key]
+    # Byte seal preferred (environment-independent; scripts/add_file_seals.py
+    # migrated the Day-1 manifest after re-verifying every frame seal in the
+    # sealing environment). Frame seal is the legacy fallback for manifests
+    # written before Day 27.
+    recorded_file = entry.get("holdout_file_sha256")
+    if recorded_file:
+        return recorded_file == sha256_of_file(holdout_path(key))
+    return entry["holdout_sha256"] == sha256_of_frame(load_holdout(key))
 
 
 def verify_all_holdouts() -> dict[str, bool]:

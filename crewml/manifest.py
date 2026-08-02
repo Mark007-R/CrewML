@@ -114,7 +114,7 @@ def dataset_seals(dataset_key: str) -> dict[str, Any]:
         from crewml.uploads import load_upload_manifest
 
         entry = load_upload_manifest(dataset_key)
-        return {
+        seals = {
             "split_seed": entry["seed"],
             "train_sha256": entry["train_sha256"],
             "holdout_sha256": entry["holdout_sha256"],
@@ -122,16 +122,26 @@ def dataset_seals(dataset_key: str) -> dict[str, Any]:
             "n_holdout": entry["n_holdout"],
             "sealed_at_ingestion": True,
         }
+        # Day-27 byte seals, when the manifest has them (pre-Day-27 uploads
+        # legitimately don't — verification falls back to the frame seal).
+        for k in ("train_file_sha256", "holdout_file_sha256"):
+            if entry.get(k):
+                seals[k] = entry[k]
+        return seals
     manifest_path = config.RESULTS_DIR / "dataset_manifest.json"
     recorded = json.loads(manifest_path.read_text(encoding="utf-8"))
     entry = recorded["datasets"][dataset_key]
-    return {
+    seals = {
         "split_seed": recorded["seed"],
         "train_sha256": entry["train_sha256"],
         "holdout_sha256": entry["holdout_sha256"],
         "n_train": entry["n_train"],
         "n_holdout": entry["n_holdout"],
     }
+    for k in ("train_file_sha256", "holdout_file_sha256"):
+        if entry.get(k):
+            seals[k] = entry[k]
+    return seals
 
 
 def environment_pins() -> dict[str, Any]:
