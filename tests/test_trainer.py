@@ -25,9 +25,6 @@ from crewml.crew.profiler import build_profile
 from crewml.crew.trainer import run_trainer
 from crewml.datasets import REGISTRY, load_train, verify_holdout_untouched
 
-# Full-crew / model-fit module: minute-scale by nature (Day 28 speed lanes).
-pytestmark = pytest.mark.slow
-
 
 def _plan(key: str) -> dict:
     return build_plan(build_profile(REGISTRY[key], load_train(key)))

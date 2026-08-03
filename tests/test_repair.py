@@ -25,9 +25,6 @@ from crewml.crew.trainer import run_trainer
 from crewml.datasets import REGISTRY, load_train, verify_holdout_untouched
 from crewml.repair import _static_guard, is_repairable, repair_loop
 
-# Full-crew / model-fit module: minute-scale by nature (Day 28 speed lanes).
-pytestmark = pytest.mark.slow
-
 KEY = "credit-g"
 
 
