@@ -27,6 +27,9 @@ import pytest
 from crewml import iteration_depth as itd
 from crewml.ablation import extract_run_facts
 
+# Full-crew / model-fit module: minute-scale by nature (Day 28 speed lanes).
+pytestmark = pytest.mark.slow
+
 
 # --- extract_run_facts: budget_bound and token accounting (pure) --------------
 
