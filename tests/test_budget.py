@@ -30,6 +30,9 @@ from crewml.crew.reporter import build_report
 from tests.test_critic import _plan, _profile, _training
 from tests.test_reporter import _state
 
+# Full-crew / model-fit module: minute-scale by nature (Day 28 speed lanes).
+pytestmark = pytest.mark.slow
+
 
 @pytest.fixture(autouse=True)
 def _no_leftover_budget():

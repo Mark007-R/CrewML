@@ -29,6 +29,9 @@ from crewml.crew.planner import build_naive_plan
 from crewml.crew.trainer import _training_config
 from crewml.datasets import REGISTRY
 
+# Full-crew / model-fit module: minute-scale by nature (Day 28 speed lanes).
+pytestmark = pytest.mark.slow
+
 SPEC = REGISTRY["credit-g"]
 
 

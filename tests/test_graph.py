@@ -30,6 +30,9 @@ from crewml.crew import (
 from crewml.crew import nodes as crew_nodes
 from crewml.datasets import REGISTRY
 
+# Full-crew / model-fit module: minute-scale by nature (Day 28 speed lanes).
+pytestmark = pytest.mark.slow
+
 SPEC = REGISTRY["credit-g"]
 
 
