@@ -27,9 +27,6 @@ from crewml.crew import critic as cr
 from crewml.crew.critic import build_critique, decide, diagnose, run_critic
 from crewml.crew.planner import build_plan
 
-# Full-crew / model-fit module: minute-scale by nature (Day 28 speed lanes).
-pytestmark = pytest.mark.slow
-
 
 # --- Fixtures: minimal profile / plan / training dicts ----------------------
 

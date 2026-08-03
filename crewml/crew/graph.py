@@ -1,4 +1,4 @@
-r"""The CrewML LangGraph — Phase 2 skeleton (Day 5).
+"""The CrewML LangGraph — Phase 2 skeleton (Day 5).
 
 Wires the seven crew nodes into the pipeline with the Critic feedback loop::
 
