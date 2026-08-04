@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "day": 30,
+  "date": "2026-08-04",
+  "what": "End-to-end verification of the exact Hugging Face Space artifact (deploy/hf_space/, assembled by scripts/deploy_hf_space.py --dry-run), built and run locally because HF returns 402 Payment Required on new Docker Space creation for free accounts (PRO now required; the create failed before any secret provisioning, so no key left the machine).",
+  "image": {
+    "tag": "crewml-space:day30",
+    "built_from": "staging tree assembled by deploy_hf_space.assemble() — 145 files, secret scan clean",
+    "size": "945MB",
+    "runtime_user": "uid=1000(crew) gid=1000(crew)"
+  },
+  "boot": {
+    "command": "docker run -d -p 7860:7860 crewml-space:day30 (no GROQ_API_KEY — the state a fresh Space has before its secret is set)",
+    "streamlit_health_7860": "ok, reachable ~10s after start",
+    "api_healthz_internal_8000": {
+      "status": "ok",
+      "version": "0.3.0",
+      "provider": "groq",
+      "mock_mode": true,
+      "datasets": ["credit-g", "diabetes", "vehicle", "cpu_small", "kin8nm"]
+    }
+  },
+  "crew_run": {
+    "note": "MOCK MODE — zero LLM calls; these numbers exercise the pipeline inside the Space image and are NOT live-LLM results (EVAL_PROTOCOL labelling rule).",
+    "dataset_key": "credit-g",
+    "run_id": "98f9197d9bd2",
+    "status": "succeeded",
+    "duration_s": 8.512,
+    "trace": ["profiler", "planner", "feature_engineer", "trainer", "critic", "ensembler", "reporter"],
+    "iterations_run": 1,
+    "final_decision": "finalize",
+    "final_model": {
+      "kind": "ensemble",
+      "members": ["random_forest", "logistic_regression", "hist_gradient_boosting"],
+      "final_cv_score": 0.797173,
+      "single_best_cv_score": 0.794048
+    },
+    "metric": "roc_auc",
+    "holdout_untouched": true,
+    "llm": {"mock_mode": true, "n_calls": 0, "tokens_spent": 0},
+    "cache": {"n_stored": 2, "backend": "file (no CREWML_REDIS_URL — the fail-open path is the Space's path)"}
+  },
+  "conclusion": "The artifact the deploy script ships boots both processes on the Space contract (one container, app_port 7860, UID-1000 user), verifies the baked sealed splits, and completes a full seven-node crew run with the holdout untouched. The only step not exercised is HF's own build+host, gated on a PRO subscription: python scripts/deploy_hf_space.py --set-secret --wait 900 once the account is upgraded."
+}

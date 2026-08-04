@@ -166,6 +166,24 @@ or the whole stack:
 docker compose up --build
 ```
 
+Deploy it as a Hugging Face Space (sdk: docker — one container, API private
+on :8000, dashboard on the Space's :7860, sealed benchmark splits baked in and
+byte-verified against the committed manifest):
+
+```bash
+python scripts/deploy_hf_space.py --set-secret --wait 900
+```
+
+The script assembles the Space repo from [`deploy/hf_space/`](deploy/hf_space/),
+secret-scans the staging tree (key *values*, not names), uploads, and
+provisions `GROQ_API_KEY` as a Space **secret** — never into the image; with
+no secret the Space boots in clearly-labelled mock mode. The exact image the
+script ships is verified end-to-end in
+[`results/day30_space_container_e2e.json`](results/day30_space_container_e2e.json).
+*One caveat outside the repo's control: hosting new Docker Spaces on free
+hardware now requires HF PRO, so the upload step is billing-gated on the
+target account.*
+
 ## Status
 
 Built in the open over 30 days. Every committed run leaves its numbers in
@@ -183,8 +201,11 @@ commits.
   self-repair, budgets, leakage guards, reproducibility
 - **Phase 5 — Production Wrapper** (Days 24–27) ✓ FastAPI + run-store, cache +
   telemetry, Streamlit dashboard, Docker / compose
-- **Phase 6 — Ship** (Days 28–30) ← test-suite warranty ✓ · README +
-  [MODEL_CARD.md](MODEL_CARD.md) + demo ✓ · HF Spaces deploy next
+- **Phase 6 — Ship** (Days 28–30) ✓ test-suite warranty · README +
+  [MODEL_CARD.md](MODEL_CARD.md) + demo · single-container Space image built,
+  E2E-verified and ready to ship via `scripts/deploy_hf_space.py`
+
+Project complete — 30 days, 6 phases, 6 true-merged PRs.
 
 ## License
 
