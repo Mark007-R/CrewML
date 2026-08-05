@@ -59,4 +59,4 @@ The script assembles the Space repo from [`deploy/hf_space/`](deploy/hf_space/),
 
 ## License
 
-MIT. See `LICENSE`.
+Single-author project by Mark Rodrigues.
