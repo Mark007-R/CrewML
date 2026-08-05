@@ -3,7 +3,7 @@
 CrewML is not one model: it is a **system that produces models**. This card
 documents the system — what it builds, how it is evaluated, and where it fails.
 Every individual run additionally emits its own per-run model card (written by
-the Reporter agent; example: [`results/sample_model_card.md`](results/sample_model_card.md))
+the Reporter agent; an example lives in the local `results/sample_model_card.md`)
 carrying that run's dataset, candidates, CV scores, Critic decisions and seals.
 This card is the contract those per-run cards inherit.
 
@@ -42,7 +42,8 @@ This card is the contract those per-run cards inherit.
 - **Benchmark suite:** 5 pinned OpenML datasets — credit-g, diabetes (binary),
   vehicle (multiclass), cpu_small, kin8nm (regression) — split once,
   seed-locked, into `train` and a **LOCKED holdout**; both splits SHA-256-sealed
-  in [`results/dataset_manifest.json`](results/dataset_manifest.json).
+  in `results/dataset_manifest.json` (local artifact set, regenerated and
+  verified by `scripts/prepare_datasets.py`).
 - **User data:** uploaded CSVs are ingested under the same rules — the target
   column is **chosen by the user, never guessed**; task, subtype and metric are
   derived from the chosen column per the evaluation protocol; the server splits
