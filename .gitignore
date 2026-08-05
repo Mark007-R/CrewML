@@ -15,10 +15,8 @@ explainers/
 reports/
 
 # --- Study artifacts (local only since 2026-08-05, Mark's call) ---
-# results JSONs/boards/charts stay on this machine; only the demo GIF the
-# README embeds remains tracked.
-results/*
-!results/demo.gif
+# results JSONs/boards/charts/demo GIF all stay on this machine.
+results/
 
 # --- Data & model artifacts (kept local; reproduced from manifest) ---
 data/

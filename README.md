@@ -16,11 +16,9 @@ SHA-256-sealed holdout it never sees.
 > **deterministic core's** score, not a live-LLM run — see *Provenance* under
 > Results.
 
-![CrewML demo — upload a CSV, choose the target, watch the crew work, read the report](results/demo.gif)
-
-*The demo above is a real, live-LLM run: a raw CSV is uploaded, the user
-**chooses** the target column (never guessed), the server splits and SHA-256-seals
-a holdout before any agent may run, and the crew is followed live to its report.*
+Run it yourself: upload a raw CSV, **choose** the target column (never
+guessed), and the server splits and SHA-256-seals a holdout before any agent
+may run — then follow the crew live to its report.
 
 ## The crew
 
