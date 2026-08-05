@@ -16,6 +16,13 @@ DEFAULT_API_URL = "http://127.0.0.1:8000"
 TIMEOUT_S = 30.0  # /upload parses + splits + seals synchronously
 
 # Display order/labels for the crew's node names as they appear in `trace`.
+# Kept as plain data here (NOT imported from crewml.crew) so the dashboard
+# stays a pure HTTP client with no crew imports.
+CREW_NODE_ORDER: tuple[str, ...] = (
+    "profiler", "planner", "feature_engineer", "trainer",
+    "critic", "ensembler", "reporter",
+)
+
 NODE_LABELS: dict[str, str] = {
     "profiler": "Profiler — EDA & leakage screens",
     "planner": "Planner — modeling plan",
@@ -24,6 +31,16 @@ NODE_LABELS: dict[str, str] = {
     "critic": "Critic — diagnose & decide",
     "ensembler": "Ensembler — combine models",
     "reporter": "Reporter — final report",
+}
+
+NODE_SHORT: dict[str, str] = {
+    "profiler": "Profiler",
+    "planner": "Planner",
+    "feature_engineer": "Feature eng.",
+    "trainer": "Trainer",
+    "critic": "Critic",
+    "ensembler": "Ensembler",
+    "reporter": "Reporter",
 }
 
 TERMINAL_STATUSES = ("succeeded", "failed")
@@ -141,6 +158,32 @@ def trace_rows(progress: Optional[dict[str, Any]]) -> list[dict[str, str]]:
          "label": NODE_LABELS.get(node, node)}
         for i, node in enumerate(trace)
     ]
+
+
+def node_states(progress: Optional[dict[str, Any]],
+                *, finished: bool = False) -> list[dict[str, Any]]:
+    """Per-node pipeline state for the live-trace visual, from a trace snapshot.
+
+    Returns one entry per node in ``CREW_NODE_ORDER``:
+    ``{"node", "label", "state", "visits"}`` where state is ``"done"``,
+    ``"active"`` (the last-visited node of an unfinished run) or ``"pending"``.
+    ``visits`` counts revisits — the Critic loop makes planner/fe/trainer/critic
+    legitimately appear more than once, and hiding that would hide the loop.
+    """
+    trace = (progress or {}).get("trace") or []
+    visits = {n: trace.count(n) for n in CREW_NODE_ORDER}
+    current = trace[-1] if trace and not finished else None
+    out = []
+    for n in CREW_NODE_ORDER:
+        if n == current:
+            state = "active"
+        elif visits[n]:
+            state = "done"
+        else:
+            state = "pending"
+        out.append({"node": n, "label": NODE_SHORT[n],
+                    "state": state, "visits": visits[n]})
+    return out
 
 
 def is_finished(status: dict[str, Any]) -> bool:
