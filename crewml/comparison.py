@@ -167,6 +167,12 @@ def render_markdown(table: dict) -> str:
         lines.append("")
         lines.append("*(mock)* — that system ran without a live LLM key; a MOCK number, "
                      "never a headline result (EVAL_PROTOCOL.md §5).")
+    # LLM-provenance disclosure. The `mock` flags of the Day-12 era keyed off
+    # key *presence*, which a revoked/restricted key satisfies — so `any_mock`
+    # alone cannot carry this caveat. The note travels in the JSON itself.
+    if table.get("provenance_note"):
+        lines.append("")
+        lines.append(f"**Provenance.** {table['provenance_note']}")
     return "\n".join(lines) + "\n"
 
 

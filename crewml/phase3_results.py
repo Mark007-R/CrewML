@@ -537,10 +537,30 @@ def render_markdown(report: dict) -> str:
     # --- 5. Caveats ---------------------------------------------------------
     add("## 5. Caveats — read before quoting")
     add("")
+    # The live-vs-headline gap is measured, not asserted: compute the per-dataset
+    # deltas (live Groq arm − headline/deterministic core) so this caveat can
+    # never drift from the data it describes. (An earlier wording claimed the
+    # live arm "reproduces them within noise" — false for kin8nm at −0.0222.)
+    mock_ds = prov["arms"].get("mock", {}).get("datasets", {})
+    groq_ds = prov["arms"].get("groq", {}).get("datasets", {})
+    gap_bits = []
+    for key, m in mock_ds.items():
+        g = groq_ds.get(key, {})
+        if not g:
+            continue
+        if g.get("ok") and isinstance(g.get("value"), float) and isinstance(m.get("value"), float):
+            gap_bits.append(f"{key} {g['value'] - m['value']:+.4f}")
+        elif g.get("ok") is False:
+            gap_bits.append(f"{key} failed outright live")
     add(
-        "* Baseline scores (Dummy / default RF / solo / AutoML) and the crew's "
-        "headline column come from the deterministic core (seed-locked); the live "
-        "Groq arm reproduces them within noise but is scored separately (Day 16)."
+        "* Baseline scores (Dummy / default RF / AutoML) and the crew's headline "
+        "column come from the deterministic core (seed-locked). The solo agent's "
+        "column is a **live Groq run** — the one live-evidenced column on the "
+        "board. The live Groq *crew* arm is scored separately (Day 16) and does "
+        "**not** reproduce the headline column within noise: "
+        + "; ".join(gap_bits)
+        + ". Quote the headline column as the deterministic core's result, never "
+        "as the live crew's."
     )
     add(
         "* The solo agent failed outright on 2/5 datasets; its column is honest "

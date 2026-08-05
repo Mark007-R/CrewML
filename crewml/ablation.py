@@ -385,6 +385,11 @@ def render_markdown(report: dict) -> str:
     ]
     if report["any_mock"]:
         lines += ["*(mock)* — a run without a live LLM key; never a headline result (EVAL_PROTOCOL.md §5).", ""]
+    # `any_mock` keys off key *presence* (a restricted key reads as live), so an
+    # explicit provenance note in the JSON is the only honest carrier for
+    # what-the-LLM-actually-did during this run.
+    if report.get("provenance_note"):
+        lines += [f"**Provenance.** {report['provenance_note']}", ""]
     return "\n".join(lines) + "\n"
 
 

@@ -141,7 +141,10 @@ def create_app(store: Optional[RunStore] = None,
         response is the upload manifest: the caller sees exactly what was
         derived and sealed before deciding to run.
         """
-        csv_bytes = await file.read()
+        # Read at most cap+1 bytes: reading the whole stream before checking the
+        # cap would buffer an arbitrarily large upload in memory first, making
+        # MAX_UPLOAD_BYTES a validation rule but not a resource bound.
+        csv_bytes = await file.read(MAX_UPLOAD_BYTES + 1)
         if len(csv_bytes) > MAX_UPLOAD_BYTES:
             raise HTTPException(status_code=413,
                                 detail=f"file exceeds {MAX_UPLOAD_BYTES} bytes")

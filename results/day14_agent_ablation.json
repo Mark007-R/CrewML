@@ -557,5 +557,6 @@
       "min_drop": 0.0,
       "best_dataset": "credit-g"
     }
-  }
+  },
+  "provenance_note": "The crew scores here come from archival runs executed during the Groq organization restriction (2026-07-20 \u2192 2026-07-22): a key was configured \u2014 so `mock: false`, which keys off key *presence* \u2014 but every live LLM call failed with `organization_restricted` and the deterministic core produced every score (see results/day16_provider_study.md and results/day17_failure_taxonomy.json). Read these as deterministic-core results, not live-LLM-crew results. \u201cLLM settings are identical across arms\u201d is literally true \u2014 and no live LLM call succeeded in any arm, so the drops measure the deterministic Planner/Feature-Engineer implementations, not LLM agents."
 }

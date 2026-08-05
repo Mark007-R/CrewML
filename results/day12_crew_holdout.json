@@ -181,5 +181,6 @@
       ],
       "crew_seconds": 118.17
     }
-  }
+  },
+  "provenance_note": "The crew scores here come from archival runs executed during the Groq organization restriction (2026-07-20 \u2192 2026-07-22): a key was configured \u2014 so `mock: false`, which keys off key *presence* \u2014 but every live LLM call failed with `organization_restricted` and the deterministic core produced every score (see results/day16_provider_study.md and results/day17_failure_taxonomy.json). Read these as deterministic-core results, not live-LLM-crew results."
 }

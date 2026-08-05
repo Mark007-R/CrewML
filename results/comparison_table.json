@@ -174,5 +174,6 @@
       "compared": 5
     }
   },
-  "any_mock": false
+  "any_mock": false,
+  "provenance_note": "The crew scores here come from archival runs executed during the Groq organization restriction (2026-07-20 \u2192 2026-07-22): a key was configured \u2014 so `mock: false`, which keys off key *presence* \u2014 but every live LLM call failed with `organization_restricted` and the deterministic core produced every score (see results/day16_provider_study.md and results/day17_failure_taxonomy.json). Read these as deterministic-core results, not live-LLM-crew results. The solo-agent column, by contrast, is a genuinely live Groq run (results/solo_agent_metrics.json: measured tokens, real tracebacks) \u2014 the crew and solo columns were NOT run under equivalent LLM conditions."
 }

@@ -14,6 +14,7 @@ and sealed from that choice.
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import sys
 import time
@@ -95,8 +96,21 @@ with tab_new:
 
     else:
         uploaded = st.file_uploader("CSV file", type=["csv"])
+        # The sealed-ingest panel below must never outlive the file it describes:
+        # session state persists across reruns, so after ingesting file A and
+        # then selecting file B (or clearing the uploader), A's derivation panel
+        # and dataset_key would otherwise stay on screen with the Run button
+        # enabled — a run against A while looking at B. Key the stored ingest to
+        # the exact bytes+name it came from and drop it on any mismatch.
+        file_key = None
         if uploaded is not None:
             csv_bytes = uploaded.getvalue()
+            file_key = (uploaded.name,
+                        hashlib.sha256(csv_bytes).hexdigest())
+        stale = st.session_state.get("upload")
+        if stale is not None and stale.get("file_key") != file_key:
+            del st.session_state["upload"]
+        if uploaded is not None:
             try:
                 preview = pd.read_csv(BytesIO(csv_bytes))
             except Exception as exc:
@@ -126,13 +140,14 @@ with tab_new:
                             csv_bytes, filename=uploaded.name,
                             target_column=target_column,
                         )
-                        st.session_state["upload"] = resp
+                        st.session_state["upload"] = {"file_key": file_key,
+                                                      "resp": resp}
                     except ApiError as exc:
                         st.error(str(exc))
 
         up = st.session_state.get("upload")
         if up:
-            s = derivation_summary(up["manifest"])
+            s = derivation_summary(up["resp"]["manifest"])
             st.subheader("What the server derived from your choice")
             c1, c2, c3 = st.columns(3)
             c1.metric("Task", f"{s['task']} ({s['subtype']})")

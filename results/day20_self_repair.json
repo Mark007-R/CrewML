@@ -562,7 +562,7 @@
   "unmeasured_faults": [],
   "measurement_valid": true,
   "measurement_caveat": null,
-  "run_note": "Live measurement in two passes, same code/seeds/provider/model and identical clean-control scores (verified before merge). Pass 1 (8 faults x 2 datasets) ran first; the non_finite fault was added afterwards and measured in pass 2 once Groq's 100k/day token budget reset \u2014 its pass-1 attempts had been refused and were correctly reported UNMEASURED rather than as failures to repair.",
+  "run_note": "Live measurement in two passes with the same provider, model, attempt budget, seeds and datasets, and bit-identical clean-control scores (verified before merge). Pass 1 (8 faults x 2 datasets) ran first; the non_finite fault was added after the Day-20 FE-validation fix and measured in pass 2 once the Groq daily token budget reset. The passes did NOT run identical code \u2014 see code_note.",
   "n_fidelity_scored": 14,
   "non_restorable_faults": [
     "key_error",
@@ -590,5 +590,7 @@
       "delta": -0.000137
     }
   ],
-  "fidelity_scope": "restorable faults only \u2014 for these the only sensible fix converges on the control's FE, so |delta| ~ 0 is a REGRESSION check (the repair did not wander), not independent proof of restoration. Faults with no restorable intent are listed under non_restorable_deltas, where a non-zero delta is the expected outcome."
+  "fidelity_scope": "restorable faults only \u2014 for these the only sensible fix converges on the control's FE, so |delta| ~ 0 is a REGRESSION check (the repair did not wander), not independent proof of restoration. Faults with no restorable intent are listed under non_restorable_deltas, where a non-zero delta is the expected outcome.",
+  "merged_from_passes": 2,
+  "code_note": "Pass 1 predates commit e6685e7, which tightened the repair acceptance gate (requiring the model.joblib and fe_source.py artifacts) and changed the attempt-record schema. The 16 pass-1 recoveries were adopted under the looser gate \u2014 they satisfied it, but were never re-checked against the stricter one. Pass 2 (non_finite x 2) ran under the current gate."
 }

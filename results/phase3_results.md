@@ -65,7 +65,7 @@ The missed probe is the phase's most valuable negative result: a leaked column a
 
 ## 5. Caveats — read before quoting
 
-* Baseline scores (Dummy / default RF / solo / AutoML) and the crew's headline column come from the deterministic core (seed-locked); the live Groq arm reproduces them within noise but is scored separately (Day 16).
+* Baseline scores (Dummy / default RF / AutoML) and the crew's headline column come from the deterministic core (seed-locked). The solo agent's column is a **live Groq run** — the one live-evidenced column on the board. The live Groq *crew* arm is scored separately (Day 16) and does **not** reproduce the headline column within noise: credit-g -0.0016; diabetes failed outright live; vehicle +0.0113; cpu_small -0.0008; kin8nm -0.0222. Quote the headline column as the deterministic core's result, never as the live crew's.
 * The solo agent failed outright on 2/5 datasets; its column is honest about that, and so are the missing deltas.
 * The Critic's recovery numbers come from an instrumented handicap (`CREWML_ABLATION_HANDICAP=1`), not from natural runs — on healthy data the loop never fired. Both facts are the finding.
 * The leakage detection window (§4) is open until Day 22. The claim "the crew detects leakage" holds only for leaks outside that window.

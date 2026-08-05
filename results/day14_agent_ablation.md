@@ -16,3 +16,5 @@
 
 A negative drop means the naive floor beat the specialist on that dataset and is reported as-is — the ablation exists to *measure* the architecture, not to flatter it. In the `no_planner` arm the Critic loop still exists but points at a critique-deaf stand-in, so any iterate decision there changes nothing: without the Planner, the Critic's instructions have no actuator.
 
+**Provenance.** The crew scores here come from archival runs executed during the Groq organization restriction (2026-07-20 → 2026-07-22): a key was configured — so `mock: false`, which keys off key *presence* — but every live LLM call failed with `organization_restricted` and the deterministic core produced every score (see results/day16_provider_study.md and results/day17_failure_taxonomy.json). Read these as deterministic-core results, not live-LLM-crew results. “LLM settings are identical across arms” is literally true — and no live LLM call succeeded in any arm, so the drops measure the deterministic Planner/Feature-Engineer implementations, not LLM agents.
+
