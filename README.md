@@ -44,48 +44,7 @@ network egress, filesystem jail, resource caps — adversarially tested).
 
 ## System architecture
 
-```mermaid
-flowchart TD
-    subgraph clients [Clients]
-        DASH["Streamlit dashboard :8501<br/><i>target chosen, never guessed</i>"]
-        HTTP["Any HTTP client"]
-    end
-
-    subgraph api [FastAPI service :8000]
-        EP["/upload · /run · /status · /report · /runs · /metrics"]
-        STORE[("SQLite run store<br/>+ manifests")]
-        JOBS["Single-flight job runner"]
-        CACHE[("Cache<br/>Redis or file, fail-open")]
-    end
-
-    subgraph crew [LangGraph crew — one shared CrewState]
-        P[Profiler] --> PL[Planner] --> FE[Feature Engineer] --> TR[Trainer] --> CR{Critic}
-        CR -- "iterate: specific fixes<br/>(max_iterations guard)" --> PL
-        CR -- finalize --> EN[Ensembler] --> RP[Reporter]
-    end
-
-    subgraph exec [Execution & data]
-        SB["Sandboxed executor<br/>import allowlist · no network · fs jail · caps"]
-        TRAIN[("train split<br/>the only data agents can load")]
-        HOLD[("SEALED holdout — SHA-256<br/>structurally unreachable from the crew")]
-    end
-
-    SCORE["Final scorer (holdout_eval)<br/>one scoring authority: crewml/scoring.py"]
-
-    DASH --> EP
-    HTTP --> EP
-    EP --> STORE
-    EP --> JOBS
-    JOBS -- "dataset id only, never a path" --> crew
-    crew <--> CACHE
-    FE & TR & EN -- generated code --> SB
-    SB --> TRAIN
-    SCORE --> HOLD
-    RP -. "record + manifest + model card" .-> STORE
-
-    style HOLD stroke:#d97706,stroke-width:2.5px
-    style CR stroke:#d97706,stroke-width:2.5px
-```
+![CrewML system architecture — clients, FastAPI service, LangGraph crew with the Critic loop, sandboxed executor, train split vs sealed holdout](assets/architecture.svg)
 
 The two amber outlines are the honesty boundary: the **Critic loop** that has
 to earn its keep (measured by ablation, Day 13), and the **sealed holdout** the
