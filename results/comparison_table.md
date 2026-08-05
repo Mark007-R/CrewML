@@ -11,3 +11,5 @@ All scores are on the LOCKED held-out split, higher is better. The crew's column
 * **Crew − Solo**: crew wins 3/3 datasets.
 * **Crew − AutoML**: crew wins 3/5 datasets.
 * **Crew − default RF**: crew wins 5/5 datasets.
+
+**Provenance.** The crew scores here come from archival runs executed during the Groq organization restriction (2026-07-20 → 2026-07-22): a key was configured — so `mock: false`, which keys off key *presence* — but every live LLM call failed with `organization_restricted` and the deterministic core produced every score (see results/day16_provider_study.md and results/day17_failure_taxonomy.json). Read these as deterministic-core results, not live-LLM-crew results. The solo-agent column, by contrast, is a genuinely live Groq run (results/solo_agent_metrics.json: measured tokens, real tracebacks) — the crew and solo columns were NOT run under equivalent LLM conditions.

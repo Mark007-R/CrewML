@@ -25,3 +25,5 @@ With a deliberately crippled first pass (first pass capacity capped to a near-st
 
 This is the honest reading of "does the loop earn its keep": on clean data it is free, and when a pass is genuinely deficient it is what recovers the score. Removing it can only ever leave score on the table, never gain any.
 
+**Provenance.** The crew scores here come from archival runs executed during the Groq organization restriction (2026-07-20 → 2026-07-22): a key was configured — so `mock: false`, which keys off key *presence* — but every live LLM call failed with `organization_restricted` and the deterministic core produced every score (see results/day16_provider_study.md and results/day17_failure_taxonomy.json). Read these as deterministic-core results, not live-LLM-crew results. “Same LLM settings” above is literally true — and no live LLM call succeeded in any arm, so this ablation measures the deterministic components.
+

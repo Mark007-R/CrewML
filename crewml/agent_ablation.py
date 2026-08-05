@@ -218,6 +218,11 @@ def render_markdown(report: dict) -> str:
     ]
     if report["any_mock"]:
         lines += ["*(mock)* — a run without a live LLM key; never a headline result (EVAL_PROTOCOL.md §5).", ""]
+    # Same carrier as comparison.py: `any_mock` keys off key presence, so a
+    # restricted-key run needs an explicit note recording that no live LLM call
+    # succeeded even though the flag says otherwise.
+    if report.get("provenance_note"):
+        lines += [f"**Provenance.** {report['provenance_note']}", ""]
     return "\n".join(lines) + "\n"
 
 

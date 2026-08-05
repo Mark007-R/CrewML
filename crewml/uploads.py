@@ -61,11 +61,11 @@ UPLOAD_MANIFEST_NAME = "upload_manifest.json"
 
 # Derivation thresholds (EVAL_PROTOCOL §2 applied to unlabeled data). An
 # integer-coded column with few distinct values reads as class labels; many
-# distinct values read as a quantity. 20 is generous for real label sets while
-# far below anything plausibly continuous.
+# distinct values read as a quantity.
 MAX_CLASSES = 50            # beyond this a "classification" pick is almost
                             # certainly an ID / free-text column — reject loudly
-INT_AS_CLASS_MAX_UNIQUE = 20
+INT_AS_CLASS_MAX_UNIQUE = 20  # generous for real label sets while far below
+                              # anything plausibly continuous
 ID_LIKE_UNIQUE_RATIO = 0.99  # integer target ~1:1 with rows → warn: looks like an id
 
 MIN_ROWS = 30  # below this a stratified 80/20 split stops being meaningful

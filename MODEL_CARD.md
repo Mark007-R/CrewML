@@ -74,6 +74,16 @@ Crew vs solo **3/3** (solo crashed on 2), vs default RF **5/5**, vs FLAML
 are **CV-on-train estimates** (`cv_score_is_holdout: false`); only the final,
 one-time holdout evaluation produces the numbers above.
 
+**Provenance.** The Crew column is the **deterministic core's** score: the
+Day-12 archival runs executed during a Groq organization restriction (a key was
+configured but every live call failed), while the Solo column is a genuinely
+live Groq run — the columns were not produced under equivalent LLM conditions.
+The live-LLM crew arm, scored separately on Day 16, differs from the Crew
+column by −0.0016 (credit-g), +0.0113 (vehicle), −0.0008 (cpu_small), −0.0222
+(kin8nm), and failed outright on diabetes. Two of the wins above are thinner
+than that live-vs-core gap: diabetes vs solo (+0.0003) and cpu_small vs RF
+(+0.0023).
+
 ## Safety & honesty measures
 
 - **Sandboxed execution:** all agent-generated code runs under an import

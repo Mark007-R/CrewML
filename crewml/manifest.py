@@ -156,8 +156,12 @@ def environment_pins() -> dict[str, Any]:
         "git_dirty": _git_dirty(),
         "llm": {
             "provider": config.LLM_PROVIDER,
+            # Only name a model for a provider that actually has one — the mock
+            # provider recording ANTHROPIC_MODEL's default ("claude-sonnet-5")
+            # was a misleading pin: no such model is ever called in mock mode.
             "model": (config.GROQ_MODEL if config.LLM_PROVIDER == "groq"
-                      else config.ANTHROPIC_MODEL),
+                      else config.ANTHROPIC_MODEL if config.LLM_PROVIDER == "anthropic"
+                      else None),
             "mock_mode": config.is_mock_mode(),
             # llm.chat pins temperature=0.0 by default; recorded so a future
             # default change shows up as a pin difference, not a mystery.

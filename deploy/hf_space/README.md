@@ -23,7 +23,10 @@ structurally unreachable from the crew — final scoring is the only reader.
 Measured on the project's locked 5-dataset benchmark: the crew beats a
 one-shot solo agent 3/3 where solo produced a model at all (solo crashed on
 the other 2), beats a default RandomForest 5/5, and is competitive with
-classical AutoML (3/5).
+classical AutoML (3/5). Those crew scores come from the **deterministic core**
+(the benchmark runs executed during a provider outage; the live-LLM arm is
+scored separately and differs per dataset) — see the repo's README *Provenance*
+note for the full accounting.
 
 - **Source, results, and the full 30-day build log:**
   [github.com/Mark007-R/CrewML](https://github.com/Mark007-R/CrewML)

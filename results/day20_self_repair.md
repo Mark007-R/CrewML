@@ -1,5 +1,7 @@
 # Day 20 — Self-repair recovery study
 
+> **CODE SKEW BETWEEN PASSES.** Pass 1 predates commit e6685e7, which tightened the repair acceptance gate (requiring the model.joblib and fe_source.py artifacts) and changed the attempt-record schema. The 16 pass-1 recoveries were adopted under the looser gate — they satisfied it, but were never re-checked against the stricter one. Pass 2 (non_finite x 2) ran under the current gate.
+
 Repairer: **groq** (llama-3.3-70b-versatile) · attempt budget: 2 · recovery rate: **18/18 = 100%** · false-positive repairs on clean runs: 0 · FE-artifact malformed: 0 · holdout seal intact: True
 
 | Dataset | Fault | Recovered | Attempt | CV after | Δ vs clean | Tokens | Wall s |

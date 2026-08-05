@@ -12,7 +12,9 @@ SHA-256-sealed holdout it never sees.
 > datasets — deltas up to **+0.26 R² / +0.14 ROC AUC**), beats a default
 > RandomForest **5/5**, and beats FLAML on **3 of 5** — losing cpu_small by 0.001
 > and kin8nm by 0.024. "Competitive with AutoML" is the honest phrasing;
-> "beats AutoML" would not be.
+> "beats AutoML" would not be. The crew column in these comparisons is the
+> **deterministic core's** score, not a live-LLM run — see *Provenance* under
+> Results.
 
 ![CrewML demo — upload a CSV, choose the target, watch the crew work, read the report](results/demo.gif)
 
@@ -66,9 +68,26 @@ import, a timed-out grid) and where it ran it swung from best-on-board
 *and* quality — is what the crew's Critic and self-repair loop exist to close.
 The two crew losses are to AutoML and are reported as losses.
 
+**Provenance.** The Crew column comes from the Day-12 archival runs, which
+executed during a Groq organization restriction: a key was configured but every
+live LLM call failed, so the **deterministic core** produced these scores. The
+solo-agent column is a genuinely live Groq run (measured tokens, real
+tracebacks) — the two columns were not run under equivalent LLM conditions. The
+live-LLM crew arm was scored separately (Day 16) and does **not** reproduce the
+Crew column within noise: credit-g −0.0016, vehicle +0.0113, cpu_small −0.0008,
+kin8nm −0.0222, and diabetes failed outright live (the Day-20 self-repair
+motivating case). Two margins above are also thinner than that live-vs-core
+gap: crew−solo on diabetes (+0.0003) and crew−RF on cpu_small (+0.0023).
+Compute footing: FLAML received 120 s *per dataset total* while the crew's
+sandbox allows 120 s *per executed script* across multiple scripts per run — a
+per-node, not system-level, parity.
+
 ### What each agent earns (ablations, Days 13–15)
 
-Removing one agent at a time and re-scoring on the same sealed holdout:
+Removing one agent at a time and re-scoring on the same sealed holdout (these
+runs executed under the same provider restriction as the board above, so they
+attribute score to the crew's *deterministic* Planner / Feature Engineer /
+Critic implementations — not to live LLM narratives):
 
 | Agent removed | Effect on held-out score |
 |---|---|
@@ -97,14 +116,17 @@ safe plateau.
   reproduces **bit-identically across fresh processes**, and live-LLM
   divergence is recorded and attributable rather than promised away.
 - **Outage resilience:** with the LLM provider unreachable, all 5 datasets
-  reproduce bit-identically from the deterministic core — an outage costs
-  narrative richness, never score.
+  reproduce the archival held-out scores exactly (max |Δ| = 0.0) from the
+  deterministic core — an outage costs narrative richness, never score. (The
+  stronger *fingerprint-level* bit-identity claim above is measured on the two
+  Day-23 study datasets, credit-g and cpu_small.)
 
 ### What it costs
 
 Live crew runs on Groq Llama-3.3-70B: **under a cent per dataset** ($0.0067
-measured for the whole benchmark suite, tokens × published price — computed
-only from tokens the accounting actually measured).
+measured across the live suite run — 4/5 datasets scored, diabetes failed live
+and its tokens are still counted; tokens × published price, computed only from
+tokens the accounting actually measured).
 
 ## Honest evaluation, in full
 

@@ -659,6 +659,11 @@ def render_table_md(report: dict[str, Any]) -> str:
         ]
     if report.get("measurement_caveat"):
         lines += [f"> **PARTIALLY UNMEASURED.** {report['measurement_caveat']}", ""]
+    # Code skew between merged passes (scripts/merge_self_repair_passes.py stamps
+    # `code_note`) is a headline-relevant caveat, not provenance trivia — the
+    # Day-20 board shipped without it and asserted "same code" for weeks.
+    if report.get("code_note"):
+        lines += [f"> **CODE SKEW BETWEEN PASSES.** {report['code_note']}", ""]
     rate = (
         f"**{report['recovered_runs']}/{report.get('measurable_runs', report['n_injected_runs'])}"
         f" = {report['recovery_rate']:.0%}**"
