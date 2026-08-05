@@ -99,10 +99,10 @@ holds a path to it; uploads get the same seal at ingestion, and
 
 All scores are on the LOCKED held-out split, higher is better. The crew never saw
 this split while modeling; every split is SHA-256-sealed in
-[`results/dataset_manifest.json`](results/dataset_manifest.json) and a test
-proves the seal held. Full provenance:
-[`results/comparison_table.md`](results/comparison_table.md) ·
-[`results/phase3_results.md`](results/phase3_results.md).
+`results/dataset_manifest.json` and a test proves the seal held. Full
+provenance lives in the local artifact set (`results/comparison_table.md`,
+`results/phase3_results.md` — study artifacts are kept out of the remote;
+`scripts/prepare_datasets.py` regenerates and verifies the splits).
 
 | Dataset | Metric | Dummy (floor) | default RF | Solo agent (live) | AutoML (FLAML) | **Crew** |
 |---|---|---|---|---|---|---|
@@ -251,22 +251,22 @@ The script assembles the Space repo from [`deploy/hf_space/`](deploy/hf_space/),
 secret-scans the staging tree (key *values*, not names), uploads, and
 provisions `GROQ_API_KEY` as a Space **secret** — never into the image; with
 no secret the Space boots in clearly-labelled mock mode. The exact image the
-script ships is verified end-to-end in
-[`results/day30_space_container_e2e.json`](results/day30_space_container_e2e.json).
+script ships is verified end-to-end (recorded in the local
+`results/day30_space_container_e2e.json`).
 *One caveat outside the repo's control: hosting new Docker Spaces on free
 hardware now requires HF PRO, so the upload step is billing-gated on the
 target account.*
 
 ## Status
 
-Built in the open over 30 days. Every committed run leaves its numbers in
-[`results/`](results/); every phase merged as a true-merge PR keeping its daily
-commits.
+Built in the open over 30 days; every phase merged as a true-merge PR keeping
+its daily commits. Run numbers and study boards live in the local `results/`
+artifact set.
 
 - **Phase 1 — Foundation & Baselines** (Days 1–4) ✓ locked datasets, sealed
   holdout, Dummy / RF / solo / AutoML baselines
 - **Phase 2 — MVP Crew** (Days 5–11) ✓ all seven nodes real, working Critic
-  loop, end-to-end run → [model card](results/sample_model_card.md)
+  loop, end-to-end run → per-run model card
 - **Phase 3 — Comparison Studies** (Days 12–18) ✓ crew vs solo vs AutoML vs
   default on the locked holdout; per-agent ablations, iteration-depth study,
   provider study, failure taxonomy
