@@ -10,10 +10,12 @@ from __future__ import annotations
 import pandas as pd
 
 from crewml.dashboard.client import (
+    CREW_NODE_ORDER,
     column_options,
     derivation_summary,
     format_column_option,
     is_finished,
+    node_states,
     run_label,
     trace_rows,
 )
@@ -70,6 +72,32 @@ def test_trace_rows_labels_known_nodes_and_passes_unknown_through():
     assert rows[1]["node"] == "critic"
     assert rows[2]["label"] == "mystery_node"  # graceful for future nodes
     assert trace_rows(None) == []
+
+
+def test_node_states_marks_done_active_pending_in_pipeline_order():
+    states = node_states({"trace": ["profiler", "planner", "feature_engineer"]})
+    assert [s["node"] for s in states] == list(CREW_NODE_ORDER)
+    by_node = {s["node"]: s["state"] for s in states}
+    assert by_node["profiler"] == "done"
+    assert by_node["planner"] == "done"
+    assert by_node["feature_engineer"] == "active"  # last visited, run not over
+    assert by_node["trainer"] == "pending"
+    assert by_node["reporter"] == "pending"
+
+
+def test_node_states_counts_critic_loop_revisits_and_respects_finished():
+    # Two Critic passes: planner/fe/trainer/critic each visited twice.
+    trace = ["profiler", "planner", "feature_engineer", "trainer", "critic",
+             "planner", "feature_engineer", "trainer", "critic",
+             "ensembler", "reporter"]
+    states = {s["node"]: s for s in node_states({"trace": trace}, finished=True)}
+    assert states["critic"]["visits"] == 2
+    assert states["planner"]["visits"] == 2
+    # finished=True: nothing is "active", the last node is simply done
+    assert states["reporter"]["state"] == "done"
+    assert all(s["state"] != "active" for s in states.values())
+    # Empty/missing progress: everything pending, nothing crashes.
+    assert all(s["state"] == "pending" for s in node_states(None))
 
 
 def test_is_finished_only_on_terminal_statuses():
