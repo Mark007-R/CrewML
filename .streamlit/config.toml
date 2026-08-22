@@ -1,0 +1,14 @@
+# CrewML dashboard theme.
+#
+# Streamlit's base theme reaches places CSS cannot — most importantly the
+# canvas-rendered st.dataframe grid, whose cell, header and grid-line colours
+# come from these values and nowhere else. The rest of the design system lives
+# in the stylesheet at the top of crewml/dashboard/app.py; the two are kept in
+# step by hand, so change both or neither.
+[theme]
+base = "light"
+primaryColor = "#1DB954"              # green — the one accent
+backgroundColor = "#FFFFFF"           # white, the page
+secondaryBackgroundColor = "#F7F7F7"  # the sidebar and widget fills
+textColor = "#121212"                 # ink
+font = "sans serif"

@@ -46,25 +46,303 @@ POLL_SECONDS = 2.0
 
 st.set_page_config(page_title="CrewML", page_icon="🤖", layout="wide")
 
-# One small stylesheet: pipeline chips + soft cards. Colors are translucent so
-# they read correctly on both Streamlit themes.
+# --- Stylesheet --------------------------------------------------------------
+# One design system, declared once: white ground, near-black ink, and a single
+# green accent, because this screen is read, not skimmed — the numbers and the
+# seal state have to be the loudest things on it, which only works if nothing
+# else competes. Green is a FILL, never small text: #1DB954 on white is 2.9:1,
+# so anything green and typographic uses --clay-deep (#0E7A3A, 4.6:1), and
+# green buttons take a black label the way Spotify's do. The same five colours
+# are mirrored in
+# .streamlit/config.toml, which is the only way to reach the canvas-rendered
+# dataframe grid — change one, change the other.
+#
+# Selectors hang off Streamlit's stable `data-testid` / `data-baseweb` hooks,
+# never the generated emotion class names. Font-family is set on containers and
+# inherited, never with a `*` rule, so the Material icon ligatures survive.
 st.markdown("""
 <style>
-.chip-row { display:flex; flex-wrap:wrap; gap:6px; align-items:center;
-            margin: 2px 0 10px 0; }
-.chip { padding: 3px 12px; border-radius: 999px; font-size: 0.82rem;
-        border: 1px solid rgba(128,128,128,.35); white-space: nowrap; }
-.chip.done    { background: rgba(22,163,74,.16); border-color: rgba(22,163,74,.55); }
-.chip.active  { background: rgba(37,99,235,.18); border-color: rgba(37,99,235,.75);
-                font-weight: 600; }
-.chip.pending { opacity: .55; }
-.chip.decision{ background: rgba(217,119,6,.14); border-color: rgba(217,119,6,.5); }
-.chip-arrow { opacity:.4; font-size:.8rem; }
-.seal-ok  { color:#16a34a; font-weight:600; }
-.seal-bad { color:#dc2626; font-weight:600; }
-div[data-testid="stMetric"] { background: rgba(128,128,128,.07);
-    border: 1px solid rgba(128,128,128,.18); border-radius: 10px;
-    padding: 10px 14px; }
+:root {
+  --paper:#F7F7F7; --ivory:#FFFFFF; --card:#FFFFFF;
+  --ink:#121212; --ink-2:#2E2E2E; --muted:#6A6A6A; --faint:#9B9B9B;
+  --line:#E8E8E8; --line-2:#D4D4D4;
+  --clay:#1DB954; --clay-deep:#0E7A3A; --clay-tint:rgba(29,185,84,.12);
+  --kraft:#1DB954; --manilla:#E8F7EE;
+  --moss:#0E7A3A; --moss-ink:#0B5F2C; --moss-tint:rgba(29,185,84,.16);
+  --sans:-apple-system,"Segoe UI Variable Text","Segoe UI",Inter,system-ui,sans-serif;
+  --serif:"Tiempos Text","Iowan Old Style",Charter,Georgia,"Times New Roman",serif;
+  --mono:"Cascadia Code","JetBrains Mono",Consolas,ui-monospace,monospace;
+  --shadow:0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(0,0,0,.055);
+}
+
+/* --- canvas ------------------------------------------------------------- */
+html, body, [data-testid="stApp"], [data-testid="stAppViewContainer"],
+[data-testid="stMain"], .stMarkdown, p, li, label, button, input, select,
+textarea, h4, h5, h6, [data-testid="stWidgetLabel"],
+[data-testid="stMetricLabel"] { font-family: var(--sans); }
+[data-testid="stApp"], [data-testid="stAppViewContainer"] {
+  background: var(--ivory); color: var(--ink);
+  -webkit-font-smoothing: antialiased; }
+[data-testid="stMainBlockContainer"], .block-container {
+  padding-top: 3.6rem; padding-bottom: 4rem; max-width: 1180px; }
+[data-testid="stSidebar"] { background: var(--paper);
+  border-right: 1px solid var(--line); }
+[data-testid="stSidebarUserContent"] { padding-top: 1.35rem; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 8px;
+  border: 3px solid var(--ivory); }
+::-webkit-scrollbar-thumb:hover { background: var(--kraft); }
+
+/* --- type --------------------------------------------------------------- */
+h1, h2, h3 { font-family: var(--serif); color: var(--ink);
+  letter-spacing: -.012em; font-weight: 600; }
+h1 { font-size: 2.15rem; line-height: 1.18; }
+h2 { font-size: 1.5rem; margin-top: 1.6rem; }
+h3 { font-size: 1.2rem; }
+h4, h5, h6 { color: var(--ink); font-weight: 640; letter-spacing: -.005em; }
+p, li { color: var(--ink-2); }
+code, kbd, pre, [data-testid="stCode"] * { font-family: var(--mono); }
+:not(pre) > code { background: rgba(29,185,84,.14); color: #0E7A3A;
+  border-radius: 5px; padding: .1em .38em; font-size: .86em; }
+[data-testid="stCaptionContainer"] p { color: var(--muted);
+  font-size: .845rem; line-height: 1.55; }
+a, a:visited { color: var(--clay-deep); text-decoration-color: var(--kraft); }
+
+/* --- hero lockup -------------------------------------------------------- */
+.crew-hero { margin: 0 0 .35rem 0; }
+.crew-eyebrow { display:flex; align-items:center; gap:9px; font-size:.72rem;
+  font-weight:700; letter-spacing:.15em; color:var(--muted);
+  text-transform:uppercase; margin-bottom:.65rem; }
+.crew-eyebrow .dot { width:8px; height:8px; border-radius:50%;
+  background:var(--clay); box-shadow:0 0 0 3px var(--clay-tint); }
+.crew-h1 { font-family:var(--serif); font-size:1.98rem; line-height:1.2;
+  font-weight:600; letter-spacing:-.018em; color:var(--ink); margin:0 0 .45rem; }
+.crew-sub { font-size:.97rem; line-height:1.58; color:var(--muted);
+  max-width:82ch; margin:0; }
+
+/* --- pipeline chips ----------------------------------------------------- */
+.chip-row { display:flex; flex-wrap:wrap; gap:5px; align-items:center;
+  margin:1rem 0 1.15rem; }
+.chip { padding:5px 13px; border-radius:999px; font-size:.795rem;
+  font-weight:550; white-space:nowrap; background:var(--card);
+  border:1px solid var(--line-2); color:var(--muted);
+  transition:background .2s ease, border-color .2s ease, color .2s ease; }
+.chip.done { background:var(--moss-tint); border-color:rgba(29,185,84,.45);
+  color:var(--moss-ink); }
+.chip.done::before { content:"\\2713"; margin-right:6px; font-weight:700;
+  color:var(--moss); }
+.chip.active { background:var(--clay-tint); border-color:var(--clay);
+  color:var(--clay-deep); font-weight:680;
+  animation:crewPulse 1.9s ease-in-out infinite; }
+@keyframes crewPulse {
+  0%,100% { box-shadow:0 0 0 0 rgba(29,185,84,.36); }
+  55%     { box-shadow:0 0 0 6px rgba(29,185,84,0); } }
+.chip.pending { opacity:.5; }
+.chip.decision { background:#EFEFEF; border-color:var(--line-2);
+  color:var(--ink-2); font-weight:620; }
+.chip-arrow { color:var(--faint); font-size:.72rem; padding:0 1px; }
+.seal-ok { color:var(--moss); font-weight:650; }
+.seal-bad { color:#E22134; font-weight:650; }
+
+/* --- cards -------------------------------------------------------------- */
+[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVerticalBlock"]) {
+  border-radius:16px; }
+div[data-testid="stVerticalBlockBorderWrapper"][style*="border"] {
+  background:var(--card); border:1px solid var(--line) !important;
+  border-radius:16px; box-shadow:var(--shadow); }
+.crew-card { background:var(--card); border:1px solid var(--line);
+  border-radius:16px; padding:18px 20px; box-shadow:var(--shadow); }
+
+/* --- metrics ------------------------------------------------------------ */
+div[data-testid="stMetric"] { background:var(--card);
+  border:1px solid var(--line); border-radius:14px; padding:14px 17px 16px;
+  box-shadow:var(--shadow);
+  transition:border-color .2s ease, box-shadow .2s ease; }
+div[data-testid="stMetric"]:hover { border-color:var(--line-2);
+  box-shadow:0 2px 4px rgba(0,0,0,.05), 0 10px 24px rgba(0,0,0,.08); }
+/* Streamlit truncates metric labels and values to one nowrap line, and its
+   emotion <style> is injected after this one — so equal-!important rules lose
+   on document order. These deliberately over-qualify to win on specificity;
+   a truncated seal or split line is exactly the kind of number this screen
+   exists to show. */
+/* height:100% inside a stretched column makes every card in a row match the
+   tallest one, while still growing to fit a value that wraps */
+[data-testid="stApp"] div[data-testid="stMetric"] { height:100% !important; }
+[data-testid="stApp"] div[data-testid="stMetric"] > div {
+  height:auto !important; }
+[data-testid="stApp"] div[data-testid="stMetric"],
+[data-testid="stApp"] div[data-testid="stMetric"] > div {
+  overflow:visible !important; }
+[data-testid="stColumn"] > div { height:100%; }
+/* NB: stMetricLabel is a <label>, not a <div> — qualifying it with `div`
+   silently matches nothing, which is how the ellipsis survived two passes. */
+[data-testid="stApp"] [data-testid="stMetricLabel"],
+[data-testid="stApp"] [data-testid="stMetricLabel"] *,
+[data-testid="stApp"] [data-testid="stMetricValue"],
+[data-testid="stApp"] [data-testid="stMetricValue"] * {
+  overflow:visible !important; text-overflow:clip !important;
+  white-space:normal !important; overflow-wrap:anywhere; }
+[data-testid="stApp"] [data-testid="stMetricLabel"] p {
+  font-size:.695rem !important; font-weight:680 !important;
+  letter-spacing:.085em; text-transform:uppercase;
+  color:var(--muted) !important; line-height:1.45 !important; }
+[data-testid="stApp"] [data-testid="stMetricValue"] {
+  font-family:var(--serif) !important; font-size:1.6rem !important;
+  line-height:1.28 !important; color:var(--ink) !important;
+  letter-spacing:-.015em; }
+
+/* --- buttons ------------------------------------------------------------ */
+[data-testid="stBaseButton-primary"] { background:var(--clay);
+  border:1px solid var(--clay); color:#0A0A0A; border-radius:11px;
+  font-weight:700; letter-spacing:.005em; padding:.6rem 1.15rem;
+  box-shadow:0 1px 2px rgba(0,0,0,.08);
+  transition:background .16s ease, box-shadow .16s ease, transform .07s ease; }
+[data-testid="stBaseButton-primary"]:hover:not(:disabled) {
+  background:var(--clay-deep); border-color:var(--clay-deep);
+  box-shadow:0 4px 14px rgba(29,185,84,.32); }
+[data-testid="stBaseButton-primary"]:active:not(:disabled) {
+  transform:translateY(1px); box-shadow:0 1px 2px rgba(0,0,0,.14); }
+[data-testid="stBaseButton-primary"]:disabled { background:var(--paper);
+  border-color:var(--line-2); color:var(--faint); box-shadow:none; }
+[data-testid="stBaseButton-secondary"] { background:var(--card);
+  border:1px solid var(--line-2); color:var(--ink-2); border-radius:11px;
+  font-weight:580; padding:.55rem 1rem;
+  transition:border-color .16s ease, background .16s ease, color .16s ease; }
+[data-testid="stBaseButton-secondary"]:hover:not(:disabled) {
+  border-color:var(--clay); background:var(--clay-tint);
+  color:var(--clay-deep); }
+
+/* --- tabs --------------------------------------------------------------- */
+[data-baseweb="tab-list"] { gap:2px; background:transparent; }
+[data-testid="stTab"] { color:var(--muted); font-weight:580; font-size:.93rem;
+  padding:9px 15px; border-radius:10px 10px 0 0;
+  transition:color .16s ease, background .16s ease; }
+[data-testid="stTab"]:hover { color:var(--ink); background:var(--clay-tint); }
+[data-testid="stTab"][aria-selected="true"] { color:var(--ink);
+  font-weight:660; }
+[data-baseweb="tab-highlight"] { background:var(--clay); height:2.5px;
+  border-radius:3px 3px 0 0; }
+[data-baseweb="tab-border"] { background:var(--line); height:1px; }
+
+/* --- inputs ------------------------------------------------------------- */
+[data-testid="stTextInputRootElement"],
+[data-testid="stSelectbox"] div[data-baseweb="select"] > div,
+[data-baseweb="input"] { background:var(--card) !important;
+  border:1px solid var(--line-2) !important; border-radius:11px !important;
+  box-shadow:none !important;
+  transition:border-color .16s ease, box-shadow .16s ease; }
+[data-testid="stTextInputRootElement"]:focus-within,
+[data-testid="stSelectbox"] div[data-baseweb="select"] > div:focus-within,
+[data-baseweb="input"]:focus-within { border-color:var(--clay) !important;
+  box-shadow:0 0 0 3px var(--clay-tint) !important; }
+[data-testid="stWidgetLabel"] p { font-size:.855rem; font-weight:600;
+  color:var(--ink-2); }
+ul[role="listbox"] { border-radius:12px !important;
+  border:1px solid var(--line-2) !important; background:var(--card) !important;
+  box-shadow:0 14px 38px rgba(0,0,0,.15) !important; padding:5px !important; }
+li[role="option"] { border-radius:8px !important; font-size:.9rem !important; }
+li[role="option"]:hover, li[role="option"][aria-selected="true"] {
+  background:var(--clay-tint) !important; color:var(--clay-deep) !important; }
+
+/* --- file uploader ------------------------------------------------------ */
+[data-testid="stFileUploaderDropzone"] { background:var(--paper);
+  border:1.5px dashed var(--line-2); border-radius:14px;
+  transition:border-color .16s ease, background .16s ease; }
+[data-testid="stFileUploaderDropzone"]:hover { border-color:var(--clay);
+  background:var(--clay-tint); }
+[data-testid="stFileUploaderFile"] { background:var(--card);
+  border:1px solid var(--line); border-radius:11px; padding:9px 12px; }
+
+/* --- code / seals ------------------------------------------------------- */
+[data-testid="stCode"] pre { background:#F6F6F6 !important;
+  border:1px solid var(--line); border-left:3px solid var(--kraft);
+  border-radius:11px; padding:13px 15px !important; }
+/* the seal is the point of this block — wrap the digest, never clip it */
+[data-testid="stApp"] [data-testid="stCode"] code {
+  color:var(--ink) !important; font-size:.8rem; background:none; padding:0;
+  white-space:pre-wrap !important; overflow-wrap:anywhere;
+  word-break:break-all; }
+[data-testid="stCodeCopyButton"] { color:var(--muted) !important; }
+[data-testid="stCodeCopyButton"]:hover { color:var(--clay-deep) !important; }
+
+/* --- alerts ------------------------------------------------------------- */
+[data-testid="stAlert"] { border-radius:13px; border:1px solid var(--line);
+  box-shadow:none; }
+[data-testid="stAlertContentInfo"] { background:#F4F4F4;
+  border-color:var(--line-2); }
+[data-testid="stAlertContentSuccess"] { background:var(--moss-tint);
+  border-color:rgba(29,185,84,.45); }
+[data-testid="stAlertContentWarning"] { background:#FFF6E0;
+  border-color:#F2D48A; }
+[data-testid="stAlertContentError"] { background:rgba(226,33,52,.09);
+  border-color:rgba(226,33,52,.35); }
+[data-testid="stAlert"] p { color:var(--ink-2); font-size:.9rem; }
+
+/* --- progress / misc ---------------------------------------------------- */
+[data-testid="stProgress"] > div > div { background:#EAEAEA !important;
+  border-radius:999px; height:9px; }
+[data-testid="stProgress"] > div > div > div > div {
+  background:var(--clay) !important;
+  border-radius:999px; }
+hr, [data-testid="stMarkdown"] hr { border-color:var(--line); }
+details, [data-testid="stExpander"] details { background:var(--card);
+  border:1px solid var(--line) !important; border-radius:13px !important;
+  box-shadow:var(--shadow); }
+[data-testid="stExpander"] summary:hover { color:var(--clay-deep); }
+[data-testid="stDataFrame"] { border:1px solid var(--line);
+  border-radius:12px; overflow:hidden; }
+[data-testid="stTooltipContent"] { background:var(--ink) !important;
+  color:var(--ivory) !important; border-radius:10px; font-size:.83rem; }
+
+/* --- sidebar ------------------------------------------------------------ */
+.sb-brand { display:flex; align-items:center; gap:11px; margin:0 0 .3rem; }
+.sb-mark { width:34px; height:34px; border-radius:10px; flex:0 0 auto;
+  background:var(--clay);
+  display:flex; align-items:center; justify-content:center; color:#0A0A0A;
+  font-family:var(--serif); font-size:1.05rem; font-weight:600;
+  box-shadow:0 2px 6px rgba(29,185,84,.30); }
+.sb-word { font-family:var(--serif); font-size:1.32rem; font-weight:600;
+  color:var(--ink); letter-spacing:-.015em; line-height:1; }
+.sb-tag { font-size:.735rem; color:var(--muted); letter-spacing:.04em;
+  margin:.15rem 0 1.1rem 45px; }
+.sb-status { display:flex; align-items:center; gap:9px; background:var(--card);
+  border:1px solid var(--line); border-radius:12px; padding:10px 12px;
+  box-shadow:var(--shadow); margin:.2rem 0 .55rem; }
+.sb-status .live { width:9px; height:9px; border-radius:50%; flex:0 0 auto;
+  background:var(--moss); animation:crewLive 2.1s ease-in-out infinite; }
+.sb-status.mock .live { background:#E22134; }
+@keyframes crewLive {
+  0%,100% { box-shadow:0 0 0 0 rgba(29,185,84,.5); }
+  60%     { box-shadow:0 0 0 5px rgba(29,185,84,0); } }
+.sb-status .txt { font-size:.8rem; color:var(--ink-2); line-height:1.35; }
+.sb-status .txt b { color:var(--ink); font-weight:660; }
+.sb-status .txt span { color:var(--muted); }
+.sb-note { border-left:2.5px solid var(--kraft); padding:2px 0 2px 12px;
+  font-size:.79rem; line-height:1.55; color:var(--muted); }
+.sb-note b { color:var(--ink-2); font-weight:640; }
+
+/* --- run header + telemetry strip --------------------------------------- */
+.run-head { display:flex; align-items:center; flex-wrap:wrap; gap:9px;
+  margin:.1rem 0 .2rem; }
+.run-pill { font-size:.7rem; font-weight:700; letter-spacing:.09em;
+  text-transform:uppercase; padding:4px 11px; border-radius:999px;
+  border:1px solid transparent; }
+.run-pill.ok { background:var(--clay); border-color:var(--clay);
+  color:#0A0A0A; }
+.run-pill.bad { background:rgba(226,33,52,.12);
+  border-color:rgba(226,33,52,.4); color:#B01B2B; }
+.run-pill.run { background:var(--clay-tint); border-color:var(--clay);
+  color:var(--clay-deep); animation:crewPulse 1.9s ease-in-out infinite; }
+.run-id, .run-ds { font-family:var(--mono); font-size:1.02rem;
+  font-weight:600; color:var(--ink); letter-spacing:-.01em; }
+.run-ds { color:var(--clay-deep); }
+.run-on { color:var(--faint); font-size:.86rem; }
+.tele { display:flex; flex-wrap:wrap; gap:.35rem 1.6rem; margin:.85rem 0 .1rem;
+  padding-top:.8rem; border-top:1px solid var(--line); }
+.tele span { font-size:.78rem; color:var(--muted); letter-spacing:.01em; }
+.tele b { font-family:var(--serif); font-size:1.02rem; font-weight:600;
+  color:var(--ink); margin-right:3px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -92,7 +370,11 @@ def pipeline_chips(states: list[dict], decisions: list[str] | None = None) -> No
 # --- API connection ----------------------------------------------------------
 
 with st.sidebar:
-    st.markdown("### 🤖 CrewML")
+    st.markdown(
+        '<div class="sb-brand"><div class="sb-mark">C</div>'
+        '<div class="sb-word">CrewML</div></div>'
+        '<div class="sb-tag">MULTI-AGENT ML CREW</div>',
+        unsafe_allow_html=True)
     api_url = st.text_input(
         "API URL", os.getenv("CREWML_API_URL", "http://127.0.0.1:8000"),
     )
@@ -105,27 +387,44 @@ with st.sidebar:
         st.stop()
 
     MOCK = bool(health.get("mock_mode"))
-    st.success(f"API {health['version']} · provider **{health['provider']}**"
-               + (" · **MOCK MODE**" if MOCK else ""))
+    n_datasets = len(health.get("datasets") or [])
+    provider = html.escape(str(health.get("provider")))
+    version = html.escape(str(health.get("version")))
+    headline = ("<b>MOCK MODE</b> — no live LLM" if MOCK
+                else f"Connected · provider <b>{provider}</b>")
+    st.markdown(
+        f'<div class="sb-status{" mock" if MOCK else ""}">'
+        f'<div class="live"></div><div class="txt">{headline}<br>'
+        f'<span>API {version} · {n_datasets} datasets registered</span>'
+        f'</div></div>',
+        unsafe_allow_html=True)
     if MOCK:
         st.warning("MOCK MODE — no LLM key configured. Runs execute the "
                    "deterministic pipeline; **numbers are not real "
                    "LLM-crew results** and are labelled as such.")
-    st.caption(f"{len(health.get('datasets') or [])} datasets registered")
     st.divider()
-    st.caption("Every score on this dashboard is a **CV-on-train** estimate — "
-               "the SHA-256-sealed holdout is scored once, by the final "
-               "scorer, never by the crew.")
+    st.markdown(
+        '<div class="sb-note">Every score on this dashboard is a '
+        '<b>CV-on-train</b> estimate. The SHA-256-sealed holdout is scored '
+        'once, by the final scorer, never by the crew.</div>',
+        unsafe_allow_html=True)
 
-st.title("CrewML — multi-agent ML crew")
+st.markdown(
+    '<div class="crew-hero">'
+    '<div class="crew-eyebrow"><span class="dot"></span>'
+    'CSV in · trained model out · holdout sealed</div>'
+    '<h1 class="crew-h1">Seven agents, one sealed holdout, '
+    'no one steering.</h1>'
+    '<p class="crew-sub">Hand the crew a raw CSV. It profiles the data, plans '
+    'the approach, engineers features, trains, critiques itself in a loop, '
+    'ensembles and writes the model card — while the holdout stays '
+    'SHA-256-sealed from the moment it is split.</p></div>',
+    unsafe_allow_html=True)
 pipeline_chips([{"node": n, "label": lbl, "state": "", "visits": 1}
                 for n, lbl in NODE_SHORT.items()])
-st.caption("Give the crew a dataset; it profiles, plans, engineers features, "
-           "trains, critiques itself in a loop, ensembles and reports — with "
-           "the holdout sealed (SHA-256) and untouched throughout.")
 
 tab_new, tab_runs, tab_report, tab_metrics = st.tabs(
-    ["🚀 New run", "📡 Runs & live trace", "📄 Report", "📊 Service metrics"]
+    ["New run", "Runs & live trace", "Report", "Service metrics"]
 )
 
 
@@ -136,7 +435,7 @@ with tab_new:
 
     dataset_key: str | None = None
 
-    with col_opts:
+    with col_opts, st.container(border=True):
         st.markdown("##### Run options")
         max_iterations = st.slider("Max Critic iterations", 1, 10, 3,
                                    help="The loop budget — the Critic can send "
@@ -221,28 +520,30 @@ with tab_new:
             up = st.session_state.get("upload")
             if up:
                 s = derivation_summary(up["resp"]["manifest"])
-                st.markdown("##### What the server derived from your choice")
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Task", f"{s['task']} ({s['subtype']})")
-                c2.metric("Metric", s["metric"])
-                c3.metric("Split (train / sealed holdout)",
-                          f"{s['n_train']} / {s['n_holdout']}")
-                st.caption(f"Rule: {s['rule']} — derived from the column "
-                           f"**you** picked (`{s['target_column']}`). Wrong "
-                           f"column? Re-upload and pick again; nothing has "
-                           f"run yet.")
-                for w in s["warnings"]:
-                    st.warning(w)
-                if s["n_rows_dropped_missing_target"]:
-                    st.caption(f"{s['n_rows_dropped_missing_target']} row(s) "
-                               f"with a missing target were dropped (labels "
-                               f"are never imputed).")
-                st.code(f"holdout sha256 = {s['holdout_sha256']}",
-                        language=None)
-                if s["already_ingested"]:
-                    st.info("This exact file + target was ingested before — "
-                            "the existing sealed split is reused (one "
-                            "dataset, one seal).")
+                with st.container(border=True):
+                    st.markdown("##### What the server derived from your "
+                                "choice")
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("Task", f"{s['task']} ({s['subtype']})")
+                    c2.metric("Metric", s["metric"])
+                    c3.metric("Split (train / sealed holdout)",
+                              f"{s['n_train']} / {s['n_holdout']}")
+                    st.caption(f"Rule: {s['rule']} — derived from the column "
+                               f"**you** picked (`{s['target_column']}`). "
+                               f"Wrong column? Re-upload and pick again; "
+                               f"nothing has run yet.")
+                    for w in s["warnings"]:
+                        st.warning(w)
+                    if s["n_rows_dropped_missing_target"]:
+                        st.caption(f"{s['n_rows_dropped_missing_target']} "
+                                   f"row(s) with a missing target were dropped "
+                                   f"(labels are never imputed).")
+                    st.code(f"holdout sha256 = {s['holdout_sha256']}",
+                            language=None)
+                    if s["already_ingested"]:
+                        st.info("This exact file + target was ingested "
+                                "before — the existing sealed split is reused "
+                                "(one dataset, one seal).")
                 dataset_key = s["dataset_key"]
 
     st.divider()
@@ -289,16 +590,39 @@ with tab_runs:
         box = st.empty()
 
         def _render(snap: dict) -> None:
-            with box.container():
-                status = snap["status"]
-                icon = {"succeeded": "✅", "failed": "❌",
-                        "running": "⏳"}.get(status, "🕐")
-                st.markdown(f"#### {icon} `{snap['run_id']}` on "
-                            f"`{snap['dataset_key']}` — **{status}**")
-                prog = snap.get("progress")
-                finished = is_finished(snap)
-                pipeline_chips(node_states(prog, finished=finished),
-                               (prog or {}).get("decisions"))
+            status = snap["status"]
+            prog = snap.get("progress")
+            finished = is_finished(snap)
+            if finished and not prog:
+                # /status drops progress the moment a run ends, which left
+                # every node reading "pending" on exactly the screen that
+                # should show the pipeline complete. The finished trace is
+                # still in the report, so read the real one — inventing a
+                # full trace here would be a lie about which nodes ran and
+                # how many times the Critic sent the crew back. Fetched
+                # BEFORE the container opens: a blocking call in the middle
+                # of a render flushes a half-drawn card to the browser.
+                try:
+                    rec = (client.report(snap["run_id"]) or {})
+                    trace = ((rec.get("record") or {}).get("trace") or [])
+                    if trace:
+                        prog = {"trace": trace}
+                except ApiError:
+                    prog = None
+
+            with box.container(border=True):
+                tone = {"succeeded": "ok", "failed": "bad"}.get(status, "run")
+                st.markdown(
+                    f'<div class="run-head">'
+                    f'<span class="run-pill {tone}">{html.escape(status)}</span>'
+                    f'<span class="run-id">{html.escape(snap["run_id"])}</span>'
+                    f'<span class="run-on">on</span>'
+                    f'<span class="run-ds">'
+                    f'{html.escape(snap["dataset_key"])}</span></div>',
+                    unsafe_allow_html=True)
+                if prog or not finished:
+                    pipeline_chips(node_states(prog, finished=finished),
+                                   (prog or {}).get("decisions"))
                 if prog and not finished:
                     done = prog.get("nodes_visited") or 0
                     st.progress(min(done / 12.0, 1.0),
@@ -325,10 +649,17 @@ with tab_runs:
                                "(`cv_score_is_holdout: false`) — never a "
                                "holdout score.")
                 if tel:
-                    st.caption(f"⏱ {tel.get('duration_s')}s · "
-                               f"{tel.get('tokens_spent') or 0} tokens · "
-                               f"{tel.get('llm_calls') or 0} LLM calls · "
-                               f"cache hits {tel.get('cache_hits') or 0}")
+                    st.markdown(
+                        f'<div class="tele">'
+                        f'<span><b>{tel.get("duration_s")}</b> s wall clock'
+                        f'</span>'
+                        f'<span><b>{tel.get("llm_calls") or 0}</b> LLM calls'
+                        f'</span>'
+                        f'<span><b>{tel.get("tokens_spent") or 0}</b> tokens'
+                        f'</span>'
+                        f'<span><b>{tel.get("cache_hits") or 0}</b> cache hits'
+                        f'</span></div>',
+                        unsafe_allow_html=True)
 
         snap = client.status(chosen)
         _render(snap)
@@ -436,7 +767,7 @@ with tab_metrics:
                 chart_df = df.dropna(subset=[score_col])
                 if not chart_df.empty:
                     st.bar_chart(chart_df.set_index("dataset")[score_col],
-                                 horizontal=True)
+                                 horizontal=True, color="#1DB954")
             st.dataframe(df, use_container_width=True, hide_index=True)
             st.caption("Per-dataset scores are CV-on-train "
                        "(`cv_score_is_holdout: false`).")
