@@ -52,7 +52,7 @@ services:
       MKL_NUM_THREADS: "2"
       CREWML_LLM_PROVIDER: ${CREWML_LLM_PROVIDER:-groq}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
-      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-120b}
       CREWML_SEED: ${CREWML_SEED:-42}
     volumes:
       # data/ carries the SHA-256-sealed train/holdout splits — a host bind
