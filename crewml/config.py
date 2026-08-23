@@ -33,7 +33,14 @@ HOLDOUT_FRACTION = 0.2
 # --- LLM provider ---
 LLM_PROVIDER = os.getenv("CREWML_LLM_PROVIDER", "groq").lower()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+# Groq decommissioned llama-3.3-70b-versatile; calls to it now 404
+# model_not_found, so the old default made a fresh clone fail on its first
+# live run. gpt-oss-120b is a REASONING model: it spends completion budget
+# on reasoning before content, so a very small max_tokens returns empty
+# text. The crew's own caps (400-6000) are ample; the connectivity probes
+# in provider_study/budget_study ask for 8 and will record an empty reply
+# while still correctly reporting the provider as reachable.
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip()
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5")
 

@@ -188,7 +188,11 @@ def probe_provider(name: str) -> dict[str, Any]:
             return rec
         started = time.perf_counter()
         try:
-            result = llm.chat(PROBE_SYSTEM, PROBE_USER, max_tokens=8)
+            # 256, not 8: a reasoning model spends completion budget on
+            # reasoning before it emits content, so a tiny cap returns a
+            # blank reply and the board records reachability without
+            # evidence of it. Still a trivial probe cost.
+            result = llm.chat(PROBE_SYSTEM, PROBE_USER, max_tokens=256)
         except Exception as exc:  # the failure text IS the finding — keep it verbatim
             rec["status"] = "error"
             rec["latency_s"] = round(time.perf_counter() - started, 3)

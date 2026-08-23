@@ -80,7 +80,8 @@ def probe_provider() -> dict[str, Any]:
         result = llm.chat(
             "You are a liveness probe for a measurement harness.",
             "Reply with the single word OK.",
-            temperature=0.0, max_tokens=8, agent="probe",
+            # 256: reasoning models emit nothing at 8 or 64 (see provider_study)
+            temperature=0.0, max_tokens=256, agent="probe",
         )
     except Exception as exc:  # the failure text IS the finding — keep it verbatim
         rec.update(live=False, latency_s=round(time.perf_counter() - started, 3),
