@@ -32,6 +32,44 @@ Source: [`results/comparison_table.md`](results/comparison_table.md) · [`result
 
 > **Provenance — read this before quoting the crew column.** These crew scores come from archival runs executed during a Groq organization restriction (2026-07-20 → 07-22). A key was configured, so the run did not flag itself as mocked, but every live LLM call failed and the **deterministic core produced every score**. Read the crew column as deterministic-core results, not live-LLM results. The solo-agent column *was* a genuinely live run, so the two columns were not produced under equivalent LLM conditions.
 
+### A live end-to-end run
+
+The board above is deterministic-core. This one is not: a single unattended run
+on an uploaded CSV, live LLM throughout, with the node cache cleared first so
+every agent call had to reach the provider.
+
+**Data.** 88,000 card transactions, 30 anonymised features, 152 fraud rows
+(0.1727%) — a stratified sample of the public 284,807-row credit-card set at the
+identical fraud rate, because the full 144 MB file is over the API's 50 MB upload
+cap. Sealed at ingestion into 70,400 train / 17,600 holdout; the holdout carries
+30 fraud rows.
+
+| | ROC AUC |
+|---|---:|
+| Cross-validated on train (5-fold, stratified) | 0.9651 |
+| **Sealed holdout, scored once** | **0.9336** |
+| CV optimism | 0.0315 |
+
+15 min 9 s wall clock · 6 live LLM calls · 0 cache hits · 7,472 tokens.
+
+**What the crew decided without being told.** Flagged `class_imbalance`,
+`target_leakage_suspected` and `duplicate_rows`; dropped `V4, V10, V12, V14, V17`
+on leakage / integrity grounds; enabled `class_weight=balanced`; generated
+feature code that failed validation on the first attempt and was self-repaired
+before it ran (`log_Amount`, `Amount_to_Time`, `min_abs_V`, `V1_mul_V2`); and
+refused its own ensemble, which scored 0.9589 against the best single model's
+0.9651 on the same folds.
+
+> **Read this before quoting 0.9336.** That holdout has now been scored by three
+> independent crew runs — 0.9153, 0.9411 and 0.9336, mean 0.930, spread ±0.013.
+> The variation is LLM non-determinism: each run wrote different feature code.
+> With 30 positives in the holdout, ±0.013 is noise rather than improvement, so
+> the honest single figure is the spread, not the best of the three. Accuracy is
+> meaningless at this imbalance — predicting "never fraud" scores 0.99830.
+
+Source: `results/demo_fraud_holdout.json` (local-only; the seal is re-fingerprinted
+after scoring and verified intact).
+
 ### Does the Critic loop earn its keep?
 
 The Critic is the differentiator, so it was ablated structurally — same seed, same settings, loop removed:
