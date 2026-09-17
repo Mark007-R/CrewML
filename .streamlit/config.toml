@@ -3,12 +3,13 @@
 # Streamlit's base theme reaches places CSS cannot — most importantly the
 # canvas-rendered st.dataframe grid, whose cell, header and grid-line colours
 # come from these values and nowhere else. The rest of the design system lives
-# in the stylesheet at the top of crewml/dashboard/app.py; the two are kept in
-# step by hand, so change both or neither.
+# in crewml/dashboard/ui_theme.py (the shared paper theme) plus the small
+# app-specific stylesheet at the top of crewml/dashboard/app.py; the three are
+# kept in step by hand, so change them together or not at all.
 [theme]
 base = "light"
-primaryColor = "#1DB954"              # green — the one accent
-backgroundColor = "#FFFFFF"           # white, the page
-secondaryBackgroundColor = "#F7F7F7"  # the sidebar and widget fills
-textColor = "#121212"                 # ink
+primaryColor = "#4D7C0F"              # olive — the one accent
+backgroundColor = "#fefaf5"           # warm paper, the page
+secondaryBackgroundColor = "#faf2e9"  # the sidebar and widget fills
+textColor = "#1c1714"                 # ink
 font = "sans serif"
