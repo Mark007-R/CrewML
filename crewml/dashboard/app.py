@@ -30,6 +30,7 @@ import streamlit as st
 # repo root — same bootstrap the scripts/ entry points use.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from crewml.dashboard import ui_theme
 from crewml.dashboard.client import (
     ApiError,
     CrewApiClient,
@@ -46,121 +47,94 @@ POLL_SECONDS = 2.0
 
 st.set_page_config(page_title="CrewML", page_icon="🤖", layout="wide")
 
-# --- Stylesheet --------------------------------------------------------------
-# One design system, declared once: white ground, near-black ink, and a single
-# green accent, because this screen is read, not skimmed — the numbers and the
-# seal state have to be the loudest things on it, which only works if nothing
-# else competes. Green is a FILL, never small text: #1DB954 on white is 2.9:1,
-# so anything green and typographic uses --clay-deep (#0E7A3A, 4.6:1), and
-# green buttons take a black label the way Spotify's do. The same five colours
-# are mirrored in
-# .streamlit/config.toml, which is the only way to reach the canvas-rendered
-# dataframe grid — change one, change the other.
+# --- Shared paper theme ------------------------------------------------------
+# mark.dev paper ground, Fraunces/Inter/JetBrains Mono, olive accent. The same
+# five base colours are mirrored in .streamlit/config.toml, which is the only
+# way to reach the canvas-rendered dataframe grid — change one, change both.
+ui_theme.apply_theme()
+
+# --- App-specific stylesheet -------------------------------------------------
+# Only what the shared theme cannot know about: the hero lockup, the pipeline
+# chips, the sidebar brand block and the run header / telemetry strip, plus the
+# few layout fixes this screen genuinely needs (metric cards that must not clip
+# a seal digest, and a code block that must wrap one).
 #
-# Selectors hang off Streamlit's stable `data-testid` / `data-baseweb` hooks,
-# never the generated emotion class names. Font-family is set on containers and
-# inherited, never with a `*` rule, so the Material icon ligatures survive.
+# Everything is expressed in the tokens ui_theme declares on :root, so the
+# accent only has to change in one place. Selectors hang off Streamlit's stable
+# `data-testid` / `data-baseweb` hooks, never the generated emotion class names.
+# Font-family is set on containers and inherited, never with a `*` or `span`
+# rule, so the Material icon ligatures survive.
 st.markdown("""
 <style>
 :root {
-  --paper:#F7F7F7; --ivory:#FFFFFF; --card:#FFFFFF;
-  --ink:#121212; --ink-2:#2E2E2E; --muted:#6A6A6A; --faint:#9B9B9B;
-  --line:#E8E8E8; --line-2:#D4D4D4;
-  --clay:#1DB954; --clay-deep:#0E7A3A; --clay-tint:rgba(29,185,84,.12);
-  --kraft:#1DB954; --manilla:#E8F7EE;
-  --moss:#0E7A3A; --moss-ink:#0B5F2C; --moss-tint:rgba(29,185,84,.16);
-  --sans:-apple-system,"Segoe UI Variable Text","Segoe UI",Inter,system-ui,sans-serif;
-  --serif:"Tiempos Text","Iowan Old Style",Charter,Georgia,"Times New Roman",serif;
-  --mono:"Cascadia Code","JetBrains Mono",Consolas,ui-monospace,monospace;
-  --shadow:0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(0,0,0,.055);
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --serif: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+  --ok: #3f7a3a;   --ok-tint: rgba(63, 122, 58, .10);
+  --bad: #b3261e;  --bad-tint: rgba(179, 38, 30, .08);
+  --warn: #a86a12; --warn-tint: rgba(168, 106, 18, .10);
+  --info: #2f5f8a; --info-tint: rgba(47, 95, 138, .09);
 }
 
 /* --- canvas ------------------------------------------------------------- */
-html, body, [data-testid="stApp"], [data-testid="stAppViewContainer"],
-[data-testid="stMain"], .stMarkdown, p, li, label, button, input, select,
-textarea, h4, h5, h6, [data-testid="stWidgetLabel"],
-[data-testid="stMetricLabel"] { font-family: var(--sans); }
-[data-testid="stApp"], [data-testid="stAppViewContainer"] {
-  background: var(--ivory); color: var(--ink);
-  -webkit-font-smoothing: antialiased; }
 [data-testid="stMainBlockContainer"], .block-container {
   padding-top: 3.6rem; padding-bottom: 4rem; max-width: 1180px; }
-[data-testid="stSidebar"] { background: var(--paper);
-  border-right: 1px solid var(--line); }
 [data-testid="stSidebarUserContent"] { padding-top: 1.35rem; }
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 8px;
-  border: 3px solid var(--ivory); }
-::-webkit-scrollbar-thumb:hover { background: var(--kraft); }
 
 /* --- type --------------------------------------------------------------- */
-h1, h2, h3 { font-family: var(--serif); color: var(--ink);
-  letter-spacing: -.012em; font-weight: 600; }
-h1 { font-size: 2.15rem; line-height: 1.18; }
+h1, h2, h3 { line-height: 1.15; }
+h1 { font-size: 2.15rem; }
 h2 { font-size: 1.5rem; margin-top: 1.6rem; }
 h3 { font-size: 1.2rem; }
-h4, h5, h6 { color: var(--ink); font-weight: 640; letter-spacing: -.005em; }
-p, li { color: var(--ink-2); }
-code, kbd, pre, [data-testid="stCode"] * { font-family: var(--mono); }
-:not(pre) > code { background: rgba(29,185,84,.14); color: #0E7A3A;
-  border-radius: 5px; padding: .1em .38em; font-size: .86em; }
-[data-testid="stCaptionContainer"] p { color: var(--muted);
-  font-size: .845rem; line-height: 1.55; }
-a, a:visited { color: var(--clay-deep); text-decoration-color: var(--kraft); }
 
 /* --- hero lockup -------------------------------------------------------- */
 .crew-hero { margin: 0 0 .35rem 0; }
-.crew-eyebrow { display:flex; align-items:center; gap:9px; font-size:.72rem;
-  font-weight:700; letter-spacing:.15em; color:var(--muted);
-  text-transform:uppercase; margin-bottom:.65rem; }
+.crew-eyebrow { display:flex; align-items:center; gap:9px;
+  font-family:var(--mono); font-size:.68rem; font-weight:600;
+  letter-spacing:.14em; color:var(--accent); text-transform:uppercase;
+  margin-bottom:.7rem; }
 .crew-eyebrow .dot { width:8px; height:8px; border-radius:50%;
-  background:var(--clay); box-shadow:0 0 0 3px var(--clay-tint); }
-.crew-h1 { font-family:var(--serif); font-size:1.98rem; line-height:1.2;
-  font-weight:600; letter-spacing:-.018em; color:var(--ink); margin:0 0 .45rem; }
-.crew-sub { font-size:.97rem; line-height:1.58; color:var(--muted);
-  max-width:82ch; margin:0; }
+  background:var(--accent); box-shadow:0 0 0 3px var(--accent-glow); }
+.crew-h1 { font-family:var(--serif); font-size:2.05rem; line-height:1.12;
+  font-weight:700; letter-spacing:-.018em; color:var(--ink);
+  margin:0 0 .5rem; text-wrap:balance; }
+.crew-sub { font-family:var(--sans); font-size:.97rem; line-height:1.62;
+  color:var(--ink-2); max-width:82ch; margin:0; }
 
 /* --- pipeline chips ----------------------------------------------------- */
 .chip-row { display:flex; flex-wrap:wrap; gap:5px; align-items:center;
-  margin:1rem 0 1.15rem; }
-.chip { padding:5px 13px; border-radius:999px; font-size:.795rem;
-  font-weight:550; white-space:nowrap; background:var(--card);
-  border:1px solid var(--line-2); color:var(--muted);
-  transition:background .2s ease, border-color .2s ease, color .2s ease; }
-.chip.done { background:var(--moss-tint); border-color:rgba(29,185,84,.45);
-  color:var(--moss-ink); }
-.chip.done::before { content:"\\2713"; margin-right:6px; font-weight:700;
-  color:var(--moss); }
-.chip.active { background:var(--clay-tint); border-color:var(--clay);
-  color:var(--clay-deep); font-weight:680;
+  margin:1.15rem 0 1.15rem; }
+.chip { font-family:var(--sans); padding:5px 14px; border-radius:999px;
+  font-size:.79rem; font-weight:500; white-space:nowrap; background:var(--card);
+  border:1px solid var(--line); color:var(--ink-3);
+  transition:background .25s ease, border-color .25s ease, color .25s ease; }
+.chip.done { background:var(--ok-tint); border-color:rgba(63,122,58,.28);
+  color:var(--ok); }
+.chip.done::before { content:"\\2713"; margin-right:6px; font-weight:700; }
+.chip.active { background:var(--accent-tint); border-color:var(--accent-line);
+  color:var(--accent); font-weight:600;
   animation:crewPulse 1.9s ease-in-out infinite; }
 @keyframes crewPulse {
-  0%,100% { box-shadow:0 0 0 0 rgba(29,185,84,.36); }
-  55%     { box-shadow:0 0 0 6px rgba(29,185,84,0); } }
-.chip.pending { opacity:.5; }
-.chip.decision { background:#EFEFEF; border-color:var(--line-2);
-  color:var(--ink-2); font-weight:620; }
-.chip-arrow { color:var(--faint); font-size:.72rem; padding:0 1px; }
-.seal-ok { color:var(--moss); font-weight:650; }
-.seal-bad { color:#E22134; font-weight:650; }
+  0%,100% { box-shadow:0 0 0 0 var(--accent-glow); }
+  55%     { box-shadow:0 0 0 6px transparent; } }
+.chip.pending { opacity:.55; }
+.chip.decision { background:var(--paper-alt); border-color:var(--line-strong);
+  color:var(--ink-2); font-weight:600; }
+.chip-arrow { color:var(--line-strong); font-size:.72rem; padding:0 1px; }
+.crew-card { background:var(--card); border:1px solid var(--line);
+  border-radius:16px; padding:18px 20px; box-shadow:var(--shadow-sm); }
+.seal-ok { color:var(--ok); font-weight:650; }
+.seal-bad { color:var(--bad); font-weight:650; }
 
 /* --- cards -------------------------------------------------------------- */
-[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVerticalBlock"]) {
+/* st.container(border=True) draws its frame from a generated class, and every
+   vertical block shares this wrapper, so nothing marks the bordered ones. Only
+   properties that stay invisible on a borderless wrapper are set: the paper
+   line colour and the card radius. */
+[data-testid="stVerticalBlockBorderWrapper"] { border-color:var(--line);
   border-radius:16px; }
-div[data-testid="stVerticalBlockBorderWrapper"][style*="border"] {
-  background:var(--card); border:1px solid var(--line) !important;
-  border-radius:16px; box-shadow:var(--shadow); }
-.crew-card { background:var(--card); border:1px solid var(--line);
-  border-radius:16px; padding:18px 20px; box-shadow:var(--shadow); }
 
 /* --- metrics ------------------------------------------------------------ */
-div[data-testid="stMetric"] { background:var(--card);
-  border:1px solid var(--line); border-radius:14px; padding:14px 17px 16px;
-  box-shadow:var(--shadow);
-  transition:border-color .2s ease, box-shadow .2s ease; }
-div[data-testid="stMetric"]:hover { border-color:var(--line-2);
-  box-shadow:0 2px 4px rgba(0,0,0,.05), 0 10px 24px rgba(0,0,0,.08); }
 /* Streamlit truncates metric labels and values to one nowrap line, and its
    emotion <style> is injected after this one — so equal-!important rules lose
    on document order. These deliberately over-qualify to win on specificity;
@@ -184,165 +158,117 @@ div[data-testid="stMetric"]:hover { border-color:var(--line-2);
   overflow:visible !important; text-overflow:clip !important;
   white-space:normal !important; overflow-wrap:anywhere; }
 [data-testid="stApp"] [data-testid="stMetricLabel"] p {
-  font-size:.695rem !important; font-weight:680 !important;
-  letter-spacing:.085em; text-transform:uppercase;
-  color:var(--muted) !important; line-height:1.45 !important; }
+  line-height:1.45 !important; }
 [data-testid="stApp"] [data-testid="stMetricValue"] {
-  font-family:var(--serif) !important; font-size:1.6rem !important;
-  line-height:1.28 !important; color:var(--ink) !important;
+  font-size:1.6rem !important; line-height:1.28 !important;
   letter-spacing:-.015em; }
 
-/* --- buttons ------------------------------------------------------------ */
-[data-testid="stBaseButton-primary"] { background:var(--clay);
-  border:1px solid var(--clay); color:#0A0A0A; border-radius:11px;
-  font-weight:700; letter-spacing:.005em; padding:.6rem 1.15rem;
-  box-shadow:0 1px 2px rgba(0,0,0,.08);
-  transition:background .16s ease, box-shadow .16s ease, transform .07s ease; }
-[data-testid="stBaseButton-primary"]:hover:not(:disabled) {
-  background:var(--clay-deep); border-color:var(--clay-deep);
-  box-shadow:0 4px 14px rgba(29,185,84,.32); }
-[data-testid="stBaseButton-primary"]:active:not(:disabled) {
-  transform:translateY(1px); box-shadow:0 1px 2px rgba(0,0,0,.14); }
-[data-testid="stBaseButton-primary"]:disabled { background:var(--paper);
-  border-color:var(--line-2); color:var(--faint); box-shadow:none; }
-[data-testid="stBaseButton-secondary"] { background:var(--card);
-  border:1px solid var(--line-2); color:var(--ink-2); border-radius:11px;
-  font-weight:580; padding:.55rem 1rem;
-  transition:border-color .16s ease, background .16s ease, color .16s ease; }
-[data-testid="stBaseButton-secondary"]:hover:not(:disabled) {
-  border-color:var(--clay); background:var(--clay-tint);
-  color:var(--clay-deep); }
-
-/* --- tabs --------------------------------------------------------------- */
-[data-baseweb="tab-list"] { gap:2px; background:transparent; }
-[data-testid="stTab"] { color:var(--muted); font-weight:580; font-size:.93rem;
-  padding:9px 15px; border-radius:10px 10px 0 0;
-  transition:color .16s ease, background .16s ease; }
-[data-testid="stTab"]:hover { color:var(--ink); background:var(--clay-tint); }
-[data-testid="stTab"][aria-selected="true"] { color:var(--ink);
-  font-weight:660; }
-[data-baseweb="tab-highlight"] { background:var(--clay); height:2.5px;
-  border-radius:3px 3px 0 0; }
-[data-baseweb="tab-border"] { background:var(--line); height:1px; }
-
-/* --- inputs ------------------------------------------------------------- */
-[data-testid="stTextInputRootElement"],
-[data-testid="stSelectbox"] div[data-baseweb="select"] > div,
-[data-baseweb="input"] { background:var(--card) !important;
-  border:1px solid var(--line-2) !important; border-radius:11px !important;
-  box-shadow:none !important;
-  transition:border-color .16s ease, box-shadow .16s ease; }
-[data-testid="stTextInputRootElement"]:focus-within,
-[data-testid="stSelectbox"] div[data-baseweb="select"] > div:focus-within,
-[data-baseweb="input"]:focus-within { border-color:var(--clay) !important;
-  box-shadow:0 0 0 3px var(--clay-tint) !important; }
-[data-testid="stWidgetLabel"] p { font-size:.855rem; font-weight:600;
-  color:var(--ink-2); }
+/* --- dropdown menus ----------------------------------------------------- */
 ul[role="listbox"] { border-radius:12px !important;
-  border:1px solid var(--line-2) !important; background:var(--card) !important;
-  box-shadow:0 14px 38px rgba(0,0,0,.15) !important; padding:5px !important; }
-li[role="option"] { border-radius:8px !important; font-size:.9rem !important; }
+  border:1px solid var(--line) !important; background:var(--card) !important;
+  box-shadow:var(--shadow-md) !important; padding:5px !important; }
+li[role="option"] { border-radius:999px !important; font-size:.9rem !important; }
 li[role="option"]:hover, li[role="option"][aria-selected="true"] {
-  background:var(--clay-tint) !important; color:var(--clay-deep) !important; }
+  background:var(--accent-tint) !important; color:var(--accent) !important; }
 
 /* --- file uploader ------------------------------------------------------ */
-[data-testid="stFileUploaderDropzone"] { background:var(--paper);
-  border:1.5px dashed var(--line-2); border-radius:14px;
-  transition:border-color .16s ease, background .16s ease; }
-[data-testid="stFileUploaderDropzone"]:hover { border-color:var(--clay);
-  background:var(--clay-tint); }
 [data-testid="stFileUploaderFile"] { background:var(--card);
-  border:1px solid var(--line); border-radius:11px; padding:9px 12px; }
+  border:1px solid var(--line); border-radius:12px; padding:9px 12px; }
 
 /* --- code / seals ------------------------------------------------------- */
-[data-testid="stCode"] pre { background:#F6F6F6 !important;
-  border:1px solid var(--line); border-left:3px solid var(--kraft);
-  border-radius:11px; padding:13px 15px !important; }
+[data-testid="stCode"] pre { border-left:3px solid var(--accent);
+  padding:13px 15px !important; }
 /* the seal is the point of this block — wrap the digest, never clip it */
 [data-testid="stApp"] [data-testid="stCode"] code {
   color:var(--ink) !important; font-size:.8rem; background:none; padding:0;
   white-space:pre-wrap !important; overflow-wrap:anywhere;
   word-break:break-all; }
-[data-testid="stCodeCopyButton"] { color:var(--muted) !important; }
-[data-testid="stCodeCopyButton"]:hover { color:var(--clay-deep) !important; }
+[data-testid="stCodeCopyButton"] { color:var(--ink-3) !important; }
+[data-testid="stCodeCopyButton"]:hover { color:var(--accent) !important; }
 
 /* --- alerts ------------------------------------------------------------- */
-[data-testid="stAlert"] { border-radius:13px; border:1px solid var(--line);
-  box-shadow:none; }
-[data-testid="stAlertContentInfo"] { background:#F4F4F4;
-  border-color:var(--line-2); }
-[data-testid="stAlertContentSuccess"] { background:var(--moss-tint);
-  border-color:rgba(29,185,84,.45); }
-[data-testid="stAlertContentWarning"] { background:#FFF6E0;
-  border-color:#F2D48A; }
-[data-testid="stAlertContentError"] { background:rgba(226,33,52,.09);
-  border-color:rgba(226,33,52,.35); }
-[data-testid="stAlert"] p { color:var(--ink-2); font-size:.9rem; }
+/* status colours keep their meaning, always on their tint. Streamlit paints
+   the tint on the outer container and only names the kind on an inner child,
+   hence :has() — tinting the child would draw a second, inset box. */
+[data-testid="stAlertContainer"] { border:1px solid transparent; }
+[data-testid="stAlertContainer"]:has([data-testid="stAlertContentInfo"]) {
+  background-color:var(--info-tint); border-color:rgba(47,95,138,.22);
+  color:var(--info); }
+[data-testid="stAlertContainer"]:has([data-testid="stAlertContentSuccess"]) {
+  background-color:var(--ok-tint); border-color:rgba(63,122,58,.25);
+  color:var(--ok); }
+[data-testid="stAlertContainer"]:has([data-testid="stAlertContentWarning"]) {
+  background-color:var(--warn-tint); border-color:rgba(168,106,18,.25);
+  color:var(--warn); }
+[data-testid="stAlertContainer"]:has([data-testid="stAlertContentError"]) {
+  background-color:var(--bad-tint); border-color:rgba(179,38,30,.22);
+  color:var(--bad); }
+[data-testid="stAlertContainer"] p, [data-testid="stAlertContainer"] li {
+  color:inherit; font-size:.9rem; }
 
 /* --- progress / misc ---------------------------------------------------- */
-[data-testid="stProgress"] > div > div { background:#EAEAEA !important;
-  border-radius:999px; height:9px; }
-[data-testid="stProgress"] > div > div > div > div {
-  background:var(--clay) !important;
-  border-radius:999px; }
-hr, [data-testid="stMarkdown"] hr { border-color:var(--line); }
-details, [data-testid="stExpander"] details { background:var(--card);
-  border:1px solid var(--line) !important; border-radius:13px !important;
-  box-shadow:var(--shadow); }
-[data-testid="stExpander"] summary:hover { color:var(--clay-deep); }
-[data-testid="stDataFrame"] { border:1px solid var(--line);
-  border-radius:12px; overflow:hidden; }
+/* the bar only: stProgress also holds the text label as a sibling div, so a
+   bare `> div > div` chain would squash that label to the bar's height */
+[data-testid="stProgress"] [data-baseweb="progress-bar"] > div > div {
+  background:var(--paper-alt) !important; border-radius:999px; height:9px; }
+[data-testid="stProgress"] [data-baseweb="progress-bar"] > div > div > div {
+  background:var(--accent) !important; border-radius:999px; }
 [data-testid="stTooltipContent"] { background:var(--ink) !important;
-  color:var(--ivory) !important; border-radius:10px; font-size:.83rem; }
+  color:var(--paper) !important; border-radius:10px; font-size:.83rem; }
 
 /* --- sidebar ------------------------------------------------------------ */
 .sb-brand { display:flex; align-items:center; gap:11px; margin:0 0 .3rem; }
-.sb-mark { width:34px; height:34px; border-radius:10px; flex:0 0 auto;
-  background:var(--clay);
-  display:flex; align-items:center; justify-content:center; color:#0A0A0A;
-  font-family:var(--serif); font-size:1.05rem; font-weight:600;
-  box-shadow:0 2px 6px rgba(29,185,84,.30); }
-.sb-word { font-family:var(--serif); font-size:1.32rem; font-weight:600;
-  color:var(--ink); letter-spacing:-.015em; line-height:1; }
-.sb-tag { font-size:.735rem; color:var(--muted); letter-spacing:.04em;
-  margin:.15rem 0 1.1rem 45px; }
+.sb-mark { width:34px; height:34px; border-radius:11px; flex:0 0 auto;
+  background:var(--accent);
+  display:flex; align-items:center; justify-content:center; color:var(--paper);
+  font-family:var(--serif); font-size:1.05rem; font-weight:700;
+  box-shadow:0 2px 10px var(--accent-glow); }
+.sb-word { font-family:var(--serif); font-size:1.32rem; font-weight:700;
+  color:var(--ink); letter-spacing:-.02em; line-height:1; }
+.sb-tag { font-family:var(--mono); font-size:.62rem; font-weight:600;
+  color:var(--ink-3); letter-spacing:.12em; margin:.3rem 0 1.1rem 45px; }
 .sb-status { display:flex; align-items:center; gap:9px; background:var(--card);
-  border:1px solid var(--line); border-radius:12px; padding:10px 12px;
-  box-shadow:var(--shadow); margin:.2rem 0 .55rem; }
+  border:1px solid var(--line); border-radius:14px; padding:10px 12px;
+  box-shadow:var(--shadow-sm); margin:.2rem 0 .55rem; }
 .sb-status .live { width:9px; height:9px; border-radius:50%; flex:0 0 auto;
-  background:var(--moss); animation:crewLive 2.1s ease-in-out infinite; }
-.sb-status.mock .live { background:#E22134; }
+  background:var(--ok); animation:crewLive 2.1s ease-in-out infinite; }
+.sb-status.mock .live { background:var(--bad); }
 @keyframes crewLive {
-  0%,100% { box-shadow:0 0 0 0 rgba(29,185,84,.5); }
-  60%     { box-shadow:0 0 0 5px rgba(29,185,84,0); } }
-.sb-status .txt { font-size:.8rem; color:var(--ink-2); line-height:1.35; }
-.sb-status .txt b { color:var(--ink); font-weight:660; }
-.sb-status .txt span { color:var(--muted); }
-.sb-note { border-left:2.5px solid var(--kraft); padding:2px 0 2px 12px;
-  font-size:.79rem; line-height:1.55; color:var(--muted); }
+  0%,100% { box-shadow:0 0 0 0 rgba(63,122,58,.45); }
+  60%     { box-shadow:0 0 0 5px rgba(63,122,58,0); } }
+.sb-status .txt { font-family:var(--sans); font-size:.8rem; color:var(--ink-2);
+  line-height:1.4; }
+.sb-status .txt b { color:var(--ink); font-weight:650; }
+.sb-status .txt span { color:var(--ink-3); }
+.sb-note { font-family:var(--sans); border-left:2.5px solid var(--accent);
+  padding:2px 0 2px 12px; font-size:.79rem; line-height:1.58;
+  color:var(--ink-3); }
 .sb-note b { color:var(--ink-2); font-weight:640; }
 
 /* --- run header + telemetry strip --------------------------------------- */
 .run-head { display:flex; align-items:center; flex-wrap:wrap; gap:9px;
   margin:.1rem 0 .2rem; }
-.run-pill { font-size:.7rem; font-weight:700; letter-spacing:.09em;
-  text-transform:uppercase; padding:4px 11px; border-radius:999px;
-  border:1px solid transparent; }
-.run-pill.ok { background:var(--clay); border-color:var(--clay);
-  color:#0A0A0A; }
-.run-pill.bad { background:rgba(226,33,52,.12);
-  border-color:rgba(226,33,52,.4); color:#B01B2B; }
-.run-pill.run { background:var(--clay-tint); border-color:var(--clay);
-  color:var(--clay-deep); animation:crewPulse 1.9s ease-in-out infinite; }
-.run-id, .run-ds { font-family:var(--mono); font-size:1.02rem;
+.run-pill { font-family:var(--mono); font-size:.64rem; font-weight:600;
+  letter-spacing:.11em; text-transform:uppercase; padding:4px 12px;
+  border-radius:999px; border:1px solid transparent; }
+.run-pill.ok { background:var(--ok-tint); border-color:rgba(63,122,58,.3);
+  color:var(--ok); }
+.run-pill.bad { background:var(--bad-tint); border-color:rgba(179,38,30,.3);
+  color:var(--bad); }
+.run-pill.run { background:var(--accent-tint);
+  border-color:var(--accent-line); color:var(--accent);
+  animation:crewPulse 1.9s ease-in-out infinite; }
+.run-id, .run-ds { font-family:var(--mono); font-size:1rem;
   font-weight:600; color:var(--ink); letter-spacing:-.01em; }
-.run-ds { color:var(--clay-deep); }
-.run-on { color:var(--faint); font-size:.86rem; }
+.run-ds { color:var(--accent); }
+.run-on { font-family:var(--sans); color:var(--ink-3); font-size:.86rem; }
 .tele { display:flex; flex-wrap:wrap; gap:.35rem 1.6rem; margin:.85rem 0 .1rem;
   padding-top:.8rem; border-top:1px solid var(--line); }
-.tele span { font-size:.78rem; color:var(--muted); letter-spacing:.01em; }
-.tele b { font-family:var(--serif); font-size:1.02rem; font-weight:600;
-  color:var(--ink); margin-right:3px; }
+.tele span { font-family:var(--mono); font-size:.68rem; font-weight:600;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); }
+.tele b { font-family:var(--serif); font-size:1.05rem; font-weight:600;
+  letter-spacing:0; text-transform:none; color:var(--accent);
+  margin-right:4px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -767,7 +693,7 @@ with tab_metrics:
                 chart_df = df.dropna(subset=[score_col])
                 if not chart_df.empty:
                     st.bar_chart(chart_df.set_index("dataset")[score_col],
-                                 horizontal=True, color="#1DB954")
+                                 horizontal=True, color=ui_theme.ACCENT)
             st.dataframe(df, use_container_width=True, hide_index=True)
             st.caption("Per-dataset scores are CV-on-train "
                        "(`cv_score_is_holdout: false`).")
